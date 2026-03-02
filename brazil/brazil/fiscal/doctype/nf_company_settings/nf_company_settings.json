@@ -1,0 +1,250 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:company",
+ "creation": "2024-01-01 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "company_section",
+  "company",
+  "cnpj",
+  "column_break_company",
+  "inscricao_estadual",
+  "inscricao_municipal",
+  "sefaz_environment",
+  "certificate_section",
+  "certificate_file",
+  "certificate_password",
+  "column_break_cert",
+  "certificate_expiry",
+  "certificate_valid",
+  "sync_section",
+  "last_nsu_nfe",
+  "last_nsu_cte",
+  "last_nsu_nfse",
+  "column_break_sync",
+  "last_sync",
+  "sync_enabled",
+  "rate_limit_section",
+  "last_empty_response_nfse",
+  "last_empty_response_nfe",
+  "last_empty_response_cte",
+  "column_break_rate",
+  "fetch_blocked_until"
+ ],
+ "fields": [
+  {
+   "fieldname": "company_section",
+   "fieldtype": "Section Break",
+   "label": "Company Information"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "cnpj",
+   "fieldtype": "Data",
+   "label": "CNPJ",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "14-digit CNPJ (numbers only)"
+  },
+  {
+   "fieldname": "column_break_company",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "inscricao_estadual",
+   "fieldtype": "Data",
+   "label": "Inscricao Estadual (IE)",
+   "description": "State Registration"
+  },
+  {
+   "fieldname": "inscricao_municipal",
+   "fieldtype": "Data",
+   "label": "Inscricao Municipal (IM)",
+   "description": "Municipal Registration"
+  },
+  {
+   "fieldname": "sefaz_environment",
+   "fieldtype": "Select",
+   "label": "SEFAZ Environment",
+   "options": "\nProduction\nHomologation",
+   "description": "Leave empty to use global setting. Production = real data, Homologation = testing"
+  },
+  {
+   "fieldname": "certificate_section",
+   "fieldtype": "Section Break",
+   "label": "Digital Certificate"
+  },
+  {
+   "fieldname": "certificate_file",
+   "fieldtype": "Attach",
+   "label": "Certificate File (PFX)",
+   "description": "Upload your digital certificate in PFX/PKCS12 format"
+  },
+  {
+   "fieldname": "certificate_password",
+   "fieldtype": "Password",
+   "label": "Certificate Password",
+   "description": "Password to unlock the PFX file"
+  },
+  {
+   "fieldname": "column_break_cert",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "certificate_expiry",
+   "fieldtype": "Date",
+   "label": "Certificate Expiry",
+   "read_only": 1,
+   "description": "Automatically detected from certificate"
+  },
+  {
+   "fieldname": "certificate_valid",
+   "fieldtype": "Check",
+   "label": "Certificate Valid",
+   "read_only": 1,
+   "description": "Certificate was successfully validated"
+  },
+  {
+   "fieldname": "sync_section",
+   "fieldtype": "Section Break",
+   "label": "Synchronization"
+  },
+  {
+   "fieldname": "last_nsu_nfe",
+   "fieldtype": "Data",
+   "label": "Last NSU (NF-e)",
+   "description": "Last fetched NF-e sequence number"
+  },
+  {
+   "fieldname": "last_nsu_cte",
+   "fieldtype": "Data",
+   "label": "Last NSU (CT-e)",
+   "description": "Last fetched CT-e sequence number"
+  },
+  {
+   "fieldname": "last_nsu_nfse",
+   "fieldtype": "Data",
+   "label": "Last NSU (NFS-e)",
+   "description": "Last fetched NFS-e sequence number"
+  },
+  {
+   "fieldname": "column_break_sync",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_sync",
+   "fieldtype": "Datetime",
+   "label": "Last Sync",
+   "read_only": 1,
+   "description": "Last successful synchronization"
+  },
+  {
+   "fieldname": "sync_enabled",
+   "fieldtype": "Check",
+   "label": "Sync Enabled",
+   "default": "1",
+   "description": "Enable automatic synchronization for this company"
+  },
+  {
+   "fieldname": "rate_limit_section",
+   "fieldtype": "Section Break",
+   "label": "Rate Limit Control",
+   "collapsible": 1,
+   "description": "SEFAZ requires 1 hour wait when no new documents. These fields track that."
+  },
+  {
+   "fieldname": "last_empty_response_nfse",
+   "fieldtype": "Datetime",
+   "label": "Last Empty Response (NFS-e)",
+   "read_only": 1,
+   "description": "When SEFAZ last returned no documents for NFS-e"
+  },
+  {
+   "fieldname": "last_empty_response_nfe",
+   "fieldtype": "Datetime",
+   "label": "Last Empty Response (NF-e)",
+   "read_only": 1,
+   "description": "When SEFAZ last returned no documents for NF-e"
+  },
+  {
+   "fieldname": "last_empty_response_cte",
+   "fieldtype": "Datetime",
+   "label": "Last Empty Response (CT-e)",
+   "read_only": 1,
+   "description": "When SEFAZ last returned no documents for CT-e"
+  },
+  {
+   "fieldname": "column_break_rate",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "fetch_blocked_until",
+   "fieldtype": "Datetime",
+   "label": "Fetch Blocked Until",
+   "read_only": 1,
+   "description": "If set, fetching is blocked until this time (due to SEFAZ rate limit)"
+  }
+ ],
+ "links": [
+  {
+   "link_doctype": "Nota Fiscal",
+   "link_fieldname": "company"
+  },
+  {
+   "link_doctype": "NF Import Log",
+   "link_fieldname": "company"
+  }
+ ],
+ "modified": "2024-01-01 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Fiscal",
+ "name": "NF Company Settings",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Brazil NF Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Brazil NF User"
+  }
+ ],
+ "search_fields": "cnpj",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "company",
+ "track_changes": 1
+}

@@ -1,0 +1,382 @@
+{
+    "actions": [],
+    "autoname": "naming_series:",
+    "allow_rename": 0,
+    "creation": "2026-02-09 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "naming_series",
+        "status",
+        "column_break_header",
+        "company",
+        "inter_company_account",
+        "reference_section",
+        "sales_invoice",
+        "payment_request",
+        "column_break_reference",
+        "payment_entry",
+        "boleto_data_section",
+        "seu_numero",
+        "nosso_numero",
+        "codigo_barras",
+        "linha_digitavel",
+        "column_break_boleto",
+        "valor_nominal",
+        "data_emissao",
+        "data_vencimento",
+        "payer_section",
+        "pagador_nome",
+        "pagador_cpf_cnpj",
+        "column_break_payer",
+        "pagador_endereco",
+        "pagador_cidade",
+        "pagador_uf",
+        "pagador_cep",
+        "pix_section",
+        "pix_enabled",
+        "pix_copia_cola",
+        "column_break_pix",
+        "qrcode_image",
+        "payment_section",
+        "valor_pago",
+        "data_pagamento",
+        "column_break_payment",
+        "discount_fine_section",
+        "desconto_valor",
+        "desconto_data_limite",
+        "column_break_discount",
+        "multa_percentual",
+        "mora_percentual",
+        "files_section",
+        "boleto_pdf",
+        "api_section",
+        "inter_request_code",
+        "inter_response"
+    ],
+    "fields": [
+        {
+            "fieldname": "naming_series",
+            "fieldtype": "Select",
+            "label": "Series",
+            "options": "BI-.YYYY.-.#####",
+            "default": "BI-.YYYY.-.#####",
+            "hidden": 1
+        },
+        {
+            "fieldname": "status",
+            "fieldtype": "Select",
+            "label": "Status",
+            "options": "Pending\nRegistered\nPaid\nOverdue\nCancelled\nError",
+            "default": "Pending",
+            "in_list_view": 1,
+            "in_standard_filter": 1,
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_header",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "company",
+            "fieldtype": "Link",
+            "label": "Company",
+            "options": "Company",
+            "reqd": 1,
+            "in_list_view": 1,
+            "in_standard_filter": 1
+        },
+        {
+            "fieldname": "inter_company_account",
+            "fieldtype": "Link",
+            "label": "Inter Company Account",
+            "options": "Inter Company Account",
+            "reqd": 1
+        },
+        {
+            "fieldname": "reference_section",
+            "fieldtype": "Section Break",
+            "label": "Reference"
+        },
+        {
+            "fieldname": "sales_invoice",
+            "fieldtype": "Link",
+            "label": "Sales Invoice",
+            "options": "Sales Invoice",
+            "in_list_view": 1,
+            "in_standard_filter": 1
+        },
+        {
+            "fieldname": "payment_request",
+            "fieldtype": "Link",
+            "label": "Payment Request",
+            "options": "Payment Request"
+        },
+        {
+            "fieldname": "column_break_reference",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "payment_entry",
+            "fieldtype": "Link",
+            "label": "Payment Entry",
+            "options": "Payment Entry",
+            "read_only": 1,
+            "description": "Auto-created when payment is received"
+        },
+        {
+            "fieldname": "boleto_data_section",
+            "fieldtype": "Section Break",
+            "label": "Boleto Data"
+        },
+        {
+            "fieldname": "seu_numero",
+            "fieldtype": "Data",
+            "label": "Seu Numero",
+            "description": "Our reference number"
+        },
+        {
+            "fieldname": "nosso_numero",
+            "fieldtype": "Data",
+            "label": "Nosso Numero",
+            "read_only": 1,
+            "in_list_view": 1,
+            "description": "Bank reference number (returned by API)"
+        },
+        {
+            "fieldname": "codigo_barras",
+            "fieldtype": "Data",
+            "label": "Codigo de Barras",
+            "read_only": 1
+        },
+        {
+            "fieldname": "linha_digitavel",
+            "fieldtype": "Data",
+            "label": "Linha Digitavel",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_boleto",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "valor_nominal",
+            "fieldtype": "Currency",
+            "label": "Valor Nominal",
+            "reqd": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "data_emissao",
+            "fieldtype": "Date",
+            "label": "Data Emissao",
+            "read_only": 1
+        },
+        {
+            "fieldname": "data_vencimento",
+            "fieldtype": "Date",
+            "label": "Data Vencimento",
+            "reqd": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "payer_section",
+            "fieldtype": "Section Break",
+            "label": "Payer (Pagador)"
+        },
+        {
+            "fieldname": "pagador_nome",
+            "fieldtype": "Data",
+            "label": "Nome",
+            "reqd": 1
+        },
+        {
+            "fieldname": "pagador_cpf_cnpj",
+            "fieldtype": "Data",
+            "label": "CPF/CNPJ",
+            "reqd": 1
+        },
+        {
+            "fieldname": "column_break_payer",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "pagador_endereco",
+            "fieldtype": "Data",
+            "label": "Endereco"
+        },
+        {
+            "fieldname": "pagador_cidade",
+            "fieldtype": "Data",
+            "label": "Cidade"
+        },
+        {
+            "fieldname": "pagador_uf",
+            "fieldtype": "Data",
+            "label": "UF"
+        },
+        {
+            "fieldname": "pagador_cep",
+            "fieldtype": "Data",
+            "label": "CEP"
+        },
+        {
+            "fieldname": "pix_section",
+            "fieldtype": "Section Break",
+            "label": "PIX (BoletoPIX)"
+        },
+        {
+            "default": "0",
+            "fieldname": "pix_enabled",
+            "fieldtype": "Check",
+            "label": "PIX Enabled"
+        },
+        {
+            "fieldname": "pix_copia_cola",
+            "fieldtype": "Small Text",
+            "label": "PIX Copia e Cola",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_pix",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "qrcode_image",
+            "fieldtype": "Attach Image",
+            "label": "QR Code",
+            "read_only": 1
+        },
+        {
+            "fieldname": "payment_section",
+            "fieldtype": "Section Break",
+            "label": "Payment"
+        },
+        {
+            "fieldname": "valor_pago",
+            "fieldtype": "Currency",
+            "label": "Valor Pago",
+            "read_only": 1
+        },
+        {
+            "fieldname": "data_pagamento",
+            "fieldtype": "Date",
+            "label": "Data Pagamento",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_payment",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "discount_fine_section",
+            "fieldtype": "Section Break",
+            "label": "Discount / Fine / Interest",
+            "collapsible": 1
+        },
+        {
+            "fieldname": "desconto_valor",
+            "fieldtype": "Currency",
+            "label": "Discount Value"
+        },
+        {
+            "fieldname": "desconto_data_limite",
+            "fieldtype": "Date",
+            "label": "Discount Deadline"
+        },
+        {
+            "fieldname": "column_break_discount",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "multa_percentual",
+            "fieldtype": "Percent",
+            "label": "Fine (%)",
+            "description": "Late payment fine percentage"
+        },
+        {
+            "fieldname": "mora_percentual",
+            "fieldtype": "Percent",
+            "label": "Daily Interest (%)",
+            "description": "Daily interest rate for late payment"
+        },
+        {
+            "fieldname": "files_section",
+            "fieldtype": "Section Break",
+            "label": "Files"
+        },
+        {
+            "fieldname": "boleto_pdf",
+            "fieldtype": "Attach",
+            "label": "Boleto PDF",
+            "read_only": 1
+        },
+        {
+            "fieldname": "api_section",
+            "fieldtype": "Section Break",
+            "label": "API Response",
+            "collapsible": 1
+        },
+        {
+            "fieldname": "inter_request_code",
+            "fieldtype": "Data",
+            "label": "Request Code",
+            "read_only": 1
+        },
+        {
+            "fieldname": "inter_response",
+            "fieldtype": "Code",
+            "label": "API Response",
+            "options": "JSON",
+            "read_only": 1
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "links": [],
+    "modified": "2026-02-09 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Bancos",
+    "name": "Inter Boleto",
+    "naming_rule": "By \"Naming Series\" field",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "Banco Inter Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "Banco Inter User",
+            "write": 1
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "title_field": "sales_invoice",
+    "track_changes": 1
+}

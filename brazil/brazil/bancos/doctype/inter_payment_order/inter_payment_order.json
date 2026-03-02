@@ -1,0 +1,348 @@
+{
+    "actions": [],
+    "autoname": "naming_series:",
+    "allow_rename": 0,
+    "creation": "2026-02-09 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "is_submittable": 1,
+    "field_order": [
+        "naming_series",
+        "status",
+        "payment_type",
+        "column_break_header",
+        "company",
+        "inter_company_account",
+        "reference_section",
+        "purchase_invoice",
+        "expense_claim",
+        "column_break_reference",
+        "payment_entry",
+        "party_section",
+        "party_type",
+        "party",
+        "column_break_party",
+        "recipient_name",
+        "recipient_cpf_cnpj",
+        "pix_section",
+        "pix_key",
+        "pix_key_type",
+        "ted_section",
+        "recipient_bank_code",
+        "recipient_agency",
+        "column_break_ted",
+        "recipient_account",
+        "recipient_account_type",
+        "boleto_payment_section",
+        "barcode",
+        "boleto_due_date",
+        "amount_section",
+        "amount",
+        "scheduled_date",
+        "result_section",
+        "transaction_id",
+        "approval_code",
+        "column_break_result",
+        "execution_date",
+        "inter_response",
+        "amended_from"
+    ],
+    "fields": [
+        {
+            "fieldname": "naming_series",
+            "fieldtype": "Select",
+            "label": "Series",
+            "options": "IPO-.YYYY.-.#####",
+            "default": "IPO-.YYYY.-.#####",
+            "hidden": 1
+        },
+        {
+            "fieldname": "status",
+            "fieldtype": "Select",
+            "label": "Status",
+            "options": "Draft\nPending Approval\nApproved\nProcessing\nCompleted\nFailed\nCancelled",
+            "default": "Draft",
+            "in_list_view": 1,
+            "in_standard_filter": 1,
+            "read_only": 1
+        },
+        {
+            "fieldname": "payment_type",
+            "fieldtype": "Select",
+            "label": "Payment Type",
+            "options": "PIX\nTED\nBoleto Payment",
+            "reqd": 1,
+            "in_list_view": 1,
+            "in_standard_filter": 1
+        },
+        {
+            "fieldname": "column_break_header",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "company",
+            "fieldtype": "Link",
+            "label": "Company",
+            "options": "Company",
+            "reqd": 1,
+            "in_standard_filter": 1
+        },
+        {
+            "fieldname": "inter_company_account",
+            "fieldtype": "Link",
+            "label": "Inter Company Account",
+            "options": "Inter Company Account",
+            "reqd": 1
+        },
+        {
+            "fieldname": "reference_section",
+            "fieldtype": "Section Break",
+            "label": "Reference"
+        },
+        {
+            "fieldname": "purchase_invoice",
+            "fieldtype": "Link",
+            "label": "Purchase Invoice",
+            "options": "Purchase Invoice",
+            "in_list_view": 1,
+            "in_standard_filter": 1
+        },
+        {
+            "fieldname": "expense_claim",
+            "fieldtype": "Link",
+            "label": "Expense Claim",
+            "options": "Expense Claim"
+        },
+        {
+            "fieldname": "column_break_reference",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "payment_entry",
+            "fieldtype": "Link",
+            "label": "Payment Entry",
+            "options": "Payment Entry",
+            "read_only": 1
+        },
+        {
+            "fieldname": "party_section",
+            "fieldtype": "Section Break",
+            "label": "Recipient"
+        },
+        {
+            "fieldname": "party_type",
+            "fieldtype": "Select",
+            "label": "Party Type",
+            "options": "\nSupplier\nEmployee\nCustomer"
+        },
+        {
+            "fieldname": "party",
+            "fieldtype": "Dynamic Link",
+            "label": "Party",
+            "options": "party_type"
+        },
+        {
+            "fieldname": "column_break_party",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "recipient_name",
+            "fieldtype": "Data",
+            "label": "Recipient Name"
+        },
+        {
+            "fieldname": "recipient_cpf_cnpj",
+            "fieldtype": "Data",
+            "label": "Recipient CPF/CNPJ"
+        },
+        {
+            "fieldname": "pix_section",
+            "fieldtype": "Section Break",
+            "label": "PIX Details",
+            "depends_on": "eval:doc.payment_type=='PIX'"
+        },
+        {
+            "fieldname": "pix_key",
+            "fieldtype": "Data",
+            "label": "PIX Key",
+            "mandatory_depends_on": "eval:doc.payment_type=='PIX'"
+        },
+        {
+            "fieldname": "pix_key_type",
+            "fieldtype": "Select",
+            "label": "PIX Key Type",
+            "options": "\nCPF\nCNPJ\nEmail\nPhone\nRandom"
+        },
+        {
+            "fieldname": "ted_section",
+            "fieldtype": "Section Break",
+            "label": "TED Details",
+            "depends_on": "eval:doc.payment_type=='TED'"
+        },
+        {
+            "fieldname": "recipient_bank_code",
+            "fieldtype": "Data",
+            "label": "Bank Code",
+            "mandatory_depends_on": "eval:doc.payment_type=='TED'"
+        },
+        {
+            "fieldname": "recipient_agency",
+            "fieldtype": "Data",
+            "label": "Agency",
+            "mandatory_depends_on": "eval:doc.payment_type=='TED'"
+        },
+        {
+            "fieldname": "column_break_ted",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "recipient_account",
+            "fieldtype": "Data",
+            "label": "Account",
+            "mandatory_depends_on": "eval:doc.payment_type=='TED'"
+        },
+        {
+            "fieldname": "recipient_account_type",
+            "fieldtype": "Select",
+            "label": "Account Type",
+            "options": "\nConta Corrente\nConta Poupanca"
+        },
+        {
+            "fieldname": "boleto_payment_section",
+            "fieldtype": "Section Break",
+            "label": "Boleto Payment Details",
+            "depends_on": "eval:doc.payment_type=='Boleto Payment'"
+        },
+        {
+            "fieldname": "barcode",
+            "fieldtype": "Data",
+            "label": "Barcode",
+            "mandatory_depends_on": "eval:doc.payment_type=='Boleto Payment'"
+        },
+        {
+            "fieldname": "boleto_due_date",
+            "fieldtype": "Date",
+            "label": "Boleto Due Date"
+        },
+        {
+            "fieldname": "amount_section",
+            "fieldtype": "Section Break",
+            "label": "Amount"
+        },
+        {
+            "fieldname": "amount",
+            "fieldtype": "Currency",
+            "label": "Amount",
+            "reqd": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "scheduled_date",
+            "fieldtype": "Date",
+            "label": "Scheduled Date",
+            "description": "Leave blank for immediate execution"
+        },
+        {
+            "fieldname": "result_section",
+            "fieldtype": "Section Break",
+            "label": "Execution Result"
+        },
+        {
+            "fieldname": "transaction_id",
+            "fieldtype": "Data",
+            "label": "Transaction ID",
+            "read_only": 1
+        },
+        {
+            "fieldname": "approval_code",
+            "fieldtype": "Data",
+            "label": "Approval Code",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_result",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "execution_date",
+            "fieldtype": "Datetime",
+            "label": "Execution Date",
+            "read_only": 1
+        },
+        {
+            "fieldname": "inter_response",
+            "fieldtype": "Code",
+            "label": "API Response",
+            "options": "JSON",
+            "read_only": 1
+        },
+        {
+            "fieldname": "amended_from",
+            "fieldtype": "Link",
+            "label": "Amended From",
+            "options": "Inter Payment Order",
+            "read_only": 1,
+            "no_copy": 1,
+            "print_hide": 1
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "links": [],
+    "modified": "2026-02-09 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Bancos",
+    "name": "Inter Payment Order",
+    "naming_rule": "By \"Naming Series\" field",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "amend": 1,
+            "cancel": 1,
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "System Manager",
+            "share": 1,
+            "submit": 1,
+            "write": 1
+        },
+        {
+            "amend": 1,
+            "cancel": 1,
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "Banco Inter Manager",
+            "share": 1,
+            "submit": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "Banco Inter User",
+            "write": 1
+        },
+        {
+            "read": 1,
+            "role": "Accounts Manager",
+            "submit": 1,
+            "write": 1
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "track_changes": 1
+}

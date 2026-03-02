@@ -1,0 +1,159 @@
+{
+    "actions": [],
+    "autoname": "hash",
+    "allow_rename": 0,
+    "creation": "2026-02-09 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "company",
+        "sync_type",
+        "status",
+        "column_break_1",
+        "started_at",
+        "completed_at",
+        "records_section",
+        "records_fetched",
+        "records_created",
+        "column_break_records",
+        "records_skipped",
+        "records_failed",
+        "details_section",
+        "date_range_start",
+        "date_range_end",
+        "column_break_details",
+        "error_message"
+    ],
+    "fields": [
+        {
+            "fieldname": "company",
+            "fieldtype": "Link",
+            "label": "Company",
+            "options": "Company",
+            "in_list_view": 1,
+            "read_only": 1
+        },
+        {
+            "fieldname": "sync_type",
+            "fieldtype": "Select",
+            "label": "Sync Type",
+            "options": "Statement\nBalance\nBoleto Status\nPIX Status\nPayment Status",
+            "in_list_view": 1,
+            "read_only": 1
+        },
+        {
+            "fieldname": "status",
+            "fieldtype": "Select",
+            "label": "Status",
+            "options": "Running\nSuccess\nPartial\nFailed",
+            "in_list_view": 1,
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_1",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "started_at",
+            "fieldtype": "Datetime",
+            "label": "Started At",
+            "in_list_view": 1,
+            "read_only": 1
+        },
+        {
+            "fieldname": "completed_at",
+            "fieldtype": "Datetime",
+            "label": "Completed At",
+            "read_only": 1
+        },
+        {
+            "fieldname": "records_section",
+            "fieldtype": "Section Break",
+            "label": "Records"
+        },
+        {
+            "default": "0",
+            "fieldname": "records_fetched",
+            "fieldtype": "Int",
+            "label": "Records Fetched",
+            "read_only": 1
+        },
+        {
+            "default": "0",
+            "fieldname": "records_created",
+            "fieldtype": "Int",
+            "label": "Records Created",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_records",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "0",
+            "fieldname": "records_skipped",
+            "fieldtype": "Int",
+            "label": "Records Skipped (Duplicates)",
+            "read_only": 1
+        },
+        {
+            "default": "0",
+            "fieldname": "records_failed",
+            "fieldtype": "Int",
+            "label": "Records Failed",
+            "read_only": 1
+        },
+        {
+            "fieldname": "details_section",
+            "fieldtype": "Section Break",
+            "label": "Details"
+        },
+        {
+            "fieldname": "date_range_start",
+            "fieldtype": "Date",
+            "label": "Date Range Start",
+            "read_only": 1
+        },
+        {
+            "fieldname": "date_range_end",
+            "fieldtype": "Date",
+            "label": "Date Range End",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_details",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "error_message",
+            "fieldtype": "Small Text",
+            "label": "Error Message",
+            "read_only": 1
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "links": [],
+    "modified": "2026-02-09 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Bancos",
+    "name": "Inter Sync Log",
+    "naming_rule": "Random",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "read": 1,
+            "role": "System Manager"
+        },
+        {
+            "read": 1,
+            "role": "Banco Inter Manager"
+        },
+        {
+            "read": 1,
+            "role": "Banco Inter User"
+        }
+    ],
+    "sort_field": "started_at",
+    "sort_order": "DESC",
+    "track_changes": 0
+}

@@ -1,0 +1,157 @@
+{
+    "charts": [],
+    "content": "[{\"id\":\"shortcuts\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inter Boleto\",\"col\":4}},{\"id\":\"shortcuts2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inter PIX Charge\",\"col\":4}},{\"id\":\"shortcuts3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inter Payment Order\",\"col\":4}}]",
+    "creation": "2026-02-09 00:00:00.000000",
+    "doctype": "Workspace",
+    "for_user": "",
+    "hide_custom": 0,
+    "icon": "bank",
+    "idx": 0,
+    "is_default": 0,
+    "label": "Bancos",
+    "links": [
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Billing",
+            "link_count": 0,
+            "onboard": 0,
+            "type": "header"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Inter Boleto",
+            "link_count": 0,
+            "link_to": "Inter Boleto",
+            "link_type": "DocType",
+            "onboard": 1,
+            "type": "Link"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Inter PIX Charge",
+            "link_count": 0,
+            "link_to": "Inter PIX Charge",
+            "link_type": "DocType",
+            "onboard": 1,
+            "type": "Link"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Payments",
+            "link_count": 0,
+            "onboard": 0,
+            "type": "header"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Inter Payment Order",
+            "link_count": 0,
+            "link_to": "Inter Payment Order",
+            "link_type": "DocType",
+            "onboard": 1,
+            "type": "Link"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Settings",
+            "link_count": 0,
+            "onboard": 0,
+            "type": "header"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Banco Inter Settings",
+            "link_count": 0,
+            "link_to": "Banco Inter Settings",
+            "link_type": "DocType",
+            "onboard": 1,
+            "type": "Link"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Inter Company Account",
+            "link_count": 0,
+            "link_to": "Inter Company Account",
+            "link_type": "DocType",
+            "onboard": 1,
+            "type": "Link"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Logs",
+            "link_count": 0,
+            "onboard": 0,
+            "type": "header"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Inter Sync Log",
+            "link_count": 0,
+            "link_to": "Inter Sync Log",
+            "link_type": "DocType",
+            "onboard": 0,
+            "type": "Link"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Inter API Log",
+            "link_count": 0,
+            "link_to": "Inter API Log",
+            "link_type": "DocType",
+            "onboard": 0,
+            "type": "Link"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Inter Webhook Log",
+            "link_count": 0,
+            "link_to": "Inter Webhook Log",
+            "link_type": "DocType",
+            "onboard": 0,
+            "type": "Link"
+        }
+    ],
+    "modified": "2026-02-09 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Bancos",
+    "name": "Bancos",
+    "owner": "Administrator",
+    "parent_page": "",
+    "public": 1,
+    "restrict_to_domain": "",
+    "roles": [],
+    "sequence_id": 1,
+    "shortcuts": [
+        {
+            "label": "Inter Boleto",
+            "link_to": "Inter Boleto",
+            "type": "DocType",
+            "color": "Blue"
+        },
+        {
+            "label": "Inter PIX Charge",
+            "link_to": "Inter PIX Charge",
+            "type": "DocType",
+            "color": "Green"
+        },
+        {
+            "label": "Inter Payment Order",
+            "link_to": "Inter Payment Order",
+            "type": "DocType",
+            "color": "Orange"
+        }
+    ],
+    "title": "Bancos"
+}

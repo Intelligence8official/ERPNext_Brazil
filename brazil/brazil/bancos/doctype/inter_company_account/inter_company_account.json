@@ -1,0 +1,261 @@
+{
+    "actions": [],
+    "autoname": "field:company",
+    "allow_rename": 0,
+    "creation": "2026-02-09 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "company_section",
+        "company",
+        "cnpj",
+        "conta_corrente",
+        "column_break_company",
+        "bank_account",
+        "sync_enabled",
+        "environment",
+        "api_credentials_section",
+        "client_id",
+        "client_secret",
+        "column_break_credentials",
+        "certificate_section",
+        "certificate_file",
+        "key_file",
+        "column_break_certificate",
+        "certificate_expiry",
+        "certificate_valid",
+        "token_cache_section",
+        "access_token",
+        "token_expiry",
+        "sync_state_section",
+        "last_statement_sync",
+        "last_balance_check",
+        "column_break_sync_state",
+        "current_balance",
+        "balance_date"
+    ],
+    "fields": [
+        {
+            "fieldname": "company_section",
+            "fieldtype": "Section Break",
+            "label": "Company"
+        },
+        {
+            "fieldname": "company",
+            "fieldtype": "Link",
+            "label": "Company",
+            "options": "Company",
+            "reqd": 1,
+            "unique": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "cnpj",
+            "fieldtype": "Data",
+            "label": "CNPJ",
+            "description": "14-digit CNPJ (numbers only)"
+        },
+        {
+            "fieldname": "conta_corrente",
+            "fieldtype": "Data",
+            "label": "Conta Corrente",
+            "description": "Checking account number at Banco Inter"
+        },
+        {
+            "fieldname": "column_break_company",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "bank_account",
+            "fieldtype": "Link",
+            "label": "Bank Account",
+            "options": "Bank Account",
+            "description": "Link to ERPNext Bank Account"
+        },
+        {
+            "default": "1",
+            "fieldname": "sync_enabled",
+            "fieldtype": "Check",
+            "label": "Sync Enabled",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "environment",
+            "fieldtype": "Select",
+            "label": "Environment Override",
+            "options": "\nProduction\nSandbox",
+            "description": "Leave blank to use global setting"
+        },
+        {
+            "fieldname": "api_credentials_section",
+            "fieldtype": "Section Break",
+            "label": "API Credentials"
+        },
+        {
+            "fieldname": "client_id",
+            "fieldtype": "Data",
+            "label": "Client ID",
+            "reqd": 1
+        },
+        {
+            "fieldname": "client_secret",
+            "fieldtype": "Password",
+            "label": "Client Secret",
+            "reqd": 1
+        },
+        {
+            "fieldname": "column_break_credentials",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "certificate_section",
+            "fieldtype": "Section Break",
+            "label": "Certificate (mTLS)"
+        },
+        {
+            "fieldname": "certificate_file",
+            "fieldtype": "Attach",
+            "label": "Certificate File (.crt)",
+            "reqd": 1,
+            "description": "Upload the .crt certificate file from Banco Inter"
+        },
+        {
+            "fieldname": "key_file",
+            "fieldtype": "Attach",
+            "label": "Key File (.key)",
+            "reqd": 1,
+            "description": "Upload the .key private key file from Banco Inter"
+        },
+        {
+            "fieldname": "column_break_certificate",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "certificate_expiry",
+            "fieldtype": "Date",
+            "label": "Certificate Expiry",
+            "read_only": 1
+        },
+        {
+            "default": "0",
+            "fieldname": "certificate_valid",
+            "fieldtype": "Check",
+            "label": "Certificate Valid",
+            "read_only": 1
+        },
+        {
+            "fieldname": "token_cache_section",
+            "fieldtype": "Section Break",
+            "label": "Token Cache",
+            "hidden": 1
+        },
+        {
+            "fieldname": "access_token",
+            "fieldtype": "Small Text",
+            "label": "Access Token",
+            "hidden": 1,
+            "read_only": 1
+        },
+        {
+            "fieldname": "token_expiry",
+            "fieldtype": "Datetime",
+            "label": "Token Expiry",
+            "hidden": 1,
+            "read_only": 1
+        },
+        {
+            "fieldname": "sync_state_section",
+            "fieldtype": "Section Break",
+            "label": "Sync State"
+        },
+        {
+            "fieldname": "last_statement_sync",
+            "fieldtype": "Datetime",
+            "label": "Last Statement Sync",
+            "read_only": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "last_balance_check",
+            "fieldtype": "Datetime",
+            "label": "Last Balance Check",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_sync_state",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "current_balance",
+            "fieldtype": "Currency",
+            "label": "Current Balance",
+            "read_only": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "balance_date",
+            "fieldtype": "Date",
+            "label": "Balance Date",
+            "read_only": 1
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "links": [
+        {
+            "link_doctype": "Inter Boleto",
+            "link_fieldname": "company",
+            "group": "Billing"
+        },
+        {
+            "link_doctype": "Inter PIX Charge",
+            "link_fieldname": "company",
+            "group": "Billing"
+        },
+        {
+            "link_doctype": "Inter Payment Order",
+            "link_fieldname": "company",
+            "group": "Payments"
+        },
+        {
+            "link_doctype": "Inter Sync Log",
+            "link_fieldname": "company",
+            "group": "Logs"
+        }
+    ],
+    "modified": "2026-02-09 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Bancos",
+    "name": "Inter Company Account",
+    "naming_rule": "By fieldname",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "Banco Inter Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "read": 1,
+            "role": "Banco Inter User"
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "title_field": "company",
+    "track_changes": 1
+}

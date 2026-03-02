@@ -1,0 +1,143 @@
+{
+    "actions": [],
+    "autoname": "hash",
+    "allow_rename": 0,
+    "creation": "2026-02-09 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "timestamp",
+        "company",
+        "api_module",
+        "column_break_1",
+        "method",
+        "endpoint",
+        "request_section",
+        "request_body",
+        "response_section",
+        "response_code",
+        "success",
+        "duration_ms",
+        "column_break_response",
+        "error_message",
+        "response_body"
+    ],
+    "fields": [
+        {
+            "fieldname": "timestamp",
+            "fieldtype": "Datetime",
+            "label": "Timestamp",
+            "in_list_view": 1,
+            "read_only": 1
+        },
+        {
+            "fieldname": "company",
+            "fieldtype": "Link",
+            "label": "Company",
+            "options": "Company",
+            "in_list_view": 1,
+            "read_only": 1
+        },
+        {
+            "fieldname": "api_module",
+            "fieldtype": "Select",
+            "label": "API Module",
+            "options": "Auth\nBanking\nCobranca\nPIX\nPayment",
+            "in_list_view": 1,
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_1",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "method",
+            "fieldtype": "Data",
+            "label": "HTTP Method",
+            "read_only": 1
+        },
+        {
+            "fieldname": "endpoint",
+            "fieldtype": "Data",
+            "label": "Endpoint",
+            "in_list_view": 1,
+            "read_only": 1
+        },
+        {
+            "fieldname": "request_section",
+            "fieldtype": "Section Break",
+            "label": "Request",
+            "collapsible": 1
+        },
+        {
+            "fieldname": "request_body",
+            "fieldtype": "Code",
+            "label": "Request Body",
+            "options": "JSON",
+            "read_only": 1
+        },
+        {
+            "fieldname": "response_section",
+            "fieldtype": "Section Break",
+            "label": "Response"
+        },
+        {
+            "fieldname": "response_code",
+            "fieldtype": "Int",
+            "label": "Response Code",
+            "in_list_view": 1,
+            "read_only": 1
+        },
+        {
+            "default": "0",
+            "fieldname": "success",
+            "fieldtype": "Check",
+            "label": "Success",
+            "read_only": 1
+        },
+        {
+            "fieldname": "duration_ms",
+            "fieldtype": "Int",
+            "label": "Duration (ms)",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_response",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "error_message",
+            "fieldtype": "Small Text",
+            "label": "Error Message",
+            "read_only": 1
+        },
+        {
+            "fieldname": "response_body",
+            "fieldtype": "Code",
+            "label": "Response Body",
+            "options": "JSON",
+            "read_only": 1
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "links": [],
+    "modified": "2026-02-09 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Bancos",
+    "name": "Inter API Log",
+    "naming_rule": "Random",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "read": 1,
+            "role": "System Manager"
+        },
+        {
+            "read": 1,
+            "role": "Banco Inter Manager"
+        }
+    ],
+    "sort_field": "timestamp",
+    "sort_order": "DESC",
+    "track_changes": 0
+}

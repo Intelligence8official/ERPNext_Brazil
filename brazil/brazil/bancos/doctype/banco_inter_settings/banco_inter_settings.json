@@ -1,0 +1,282 @@
+{
+    "actions": [],
+    "allow_rename": 0,
+    "creation": "2026-02-09 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "general_section",
+        "enabled",
+        "environment",
+        "default_company",
+        "column_break_general",
+        "statement_sync_section",
+        "auto_sync_statements",
+        "sync_interval_hours",
+        "sync_days_back",
+        "column_break_sync",
+        "reconciliation_section",
+        "auto_reconcile",
+        "reconcile_tolerance_percent",
+        "reconcile_match_description",
+        "column_break_reconcile",
+        "boleto_section",
+        "default_days_to_due",
+        "auto_cancel_expired_days",
+        "enable_pix_on_boleto",
+        "column_break_boleto",
+        "pix_section",
+        "pix_expiration_seconds",
+        "column_break_pix",
+        "webhooks_section",
+        "webhook_enabled",
+        "webhook_secret",
+        "column_break_webhooks",
+        "payments_section",
+        "auto_create_payment_entry",
+        "payment_approval_required",
+        "column_break_payments",
+        "notifications_section",
+        "alert_email",
+        "send_payment_received_alerts",
+        "send_error_alerts"
+    ],
+    "fields": [
+        {
+            "fieldname": "general_section",
+            "fieldtype": "Section Break",
+            "label": "General"
+        },
+        {
+            "default": "0",
+            "fieldname": "enabled",
+            "fieldtype": "Check",
+            "label": "Enabled"
+        },
+        {
+            "default": "Sandbox",
+            "fieldname": "environment",
+            "fieldtype": "Select",
+            "label": "Environment",
+            "options": "Sandbox\nProduction",
+            "reqd": 1
+        },
+        {
+            "fieldname": "default_company",
+            "fieldtype": "Link",
+            "label": "Default Company",
+            "options": "Company"
+        },
+        {
+            "fieldname": "column_break_general",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "statement_sync_section",
+            "fieldtype": "Section Break",
+            "label": "Statement Sync"
+        },
+        {
+            "default": "1",
+            "fieldname": "auto_sync_statements",
+            "fieldtype": "Check",
+            "label": "Auto Sync Statements"
+        },
+        {
+            "default": "6",
+            "fieldname": "sync_interval_hours",
+            "fieldtype": "Int",
+            "label": "Sync Interval (hours)",
+            "description": "How often to fetch bank statements"
+        },
+        {
+            "default": "3",
+            "fieldname": "sync_days_back",
+            "fieldtype": "Int",
+            "label": "Sync Days Back",
+            "description": "Number of days of history to fetch per sync"
+        },
+        {
+            "fieldname": "column_break_sync",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "reconciliation_section",
+            "fieldtype": "Section Break",
+            "label": "Reconciliation"
+        },
+        {
+            "default": "1",
+            "fieldname": "auto_reconcile",
+            "fieldtype": "Check",
+            "label": "Auto Reconcile Transactions"
+        },
+        {
+            "default": "1",
+            "fieldname": "reconcile_tolerance_percent",
+            "fieldtype": "Percent",
+            "label": "Reconciliation Tolerance (%)",
+            "description": "Value tolerance when matching transactions"
+        },
+        {
+            "default": "1",
+            "fieldname": "reconcile_match_description",
+            "fieldtype": "Check",
+            "label": "Match by Description"
+        },
+        {
+            "fieldname": "column_break_reconcile",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "boleto_section",
+            "fieldtype": "Section Break",
+            "label": "Boleto / BoletoPIX"
+        },
+        {
+            "default": "30",
+            "fieldname": "default_days_to_due",
+            "fieldtype": "Int",
+            "label": "Default Days to Due"
+        },
+        {
+            "default": "5",
+            "fieldname": "auto_cancel_expired_days",
+            "fieldtype": "Int",
+            "label": "Auto Cancel After Expiry (days)",
+            "description": "Cancel boletos N days after due date"
+        },
+        {
+            "default": "1",
+            "fieldname": "enable_pix_on_boleto",
+            "fieldtype": "Check",
+            "label": "Enable PIX on Boleto (BoletoPIX)",
+            "description": "Generate hybrid BoletoPIX with barcode and QR code"
+        },
+        {
+            "fieldname": "column_break_boleto",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "pix_section",
+            "fieldtype": "Section Break",
+            "label": "PIX"
+        },
+        {
+            "default": "3600",
+            "fieldname": "pix_expiration_seconds",
+            "fieldtype": "Int",
+            "label": "PIX Expiration (seconds)",
+            "description": "PIX QR code validity in seconds"
+        },
+        {
+            "fieldname": "column_break_pix",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "webhooks_section",
+            "fieldtype": "Section Break",
+            "label": "Webhooks"
+        },
+        {
+            "default": "0",
+            "fieldname": "webhook_enabled",
+            "fieldtype": "Check",
+            "label": "Enable Webhooks"
+        },
+        {
+            "fieldname": "webhook_secret",
+            "fieldtype": "Password",
+            "label": "Webhook Secret",
+            "description": "Shared secret for webhook validation"
+        },
+        {
+            "fieldname": "column_break_webhooks",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "payments_section",
+            "fieldtype": "Section Break",
+            "label": "Payments"
+        },
+        {
+            "default": "1",
+            "fieldname": "auto_create_payment_entry",
+            "fieldtype": "Check",
+            "label": "Auto Create Payment Entry",
+            "description": "Automatically create Payment Entry when payment is received"
+        },
+        {
+            "default": "0",
+            "fieldname": "payment_approval_required",
+            "fieldtype": "Check",
+            "label": "Payment Approval Required",
+            "description": "Require manager approval before executing outbound payments"
+        },
+        {
+            "fieldname": "column_break_payments",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "notifications_section",
+            "fieldtype": "Section Break",
+            "label": "Notifications"
+        },
+        {
+            "fieldname": "alert_email",
+            "fieldtype": "Data",
+            "label": "Alert Email",
+            "options": "Email"
+        },
+        {
+            "default": "1",
+            "fieldname": "send_payment_received_alerts",
+            "fieldtype": "Check",
+            "label": "Send Payment Received Alerts"
+        },
+        {
+            "default": "1",
+            "fieldname": "send_error_alerts",
+            "fieldtype": "Check",
+            "label": "Send Error Alerts"
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "issingle": 1,
+    "links": [],
+    "modified": "2026-02-09 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Bancos",
+    "name": "Banco Inter Settings",
+    "naming_rule": "Expression (old style)",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "Banco Inter Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "read": 1,
+            "role": "Banco Inter User"
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "track_changes": 1
+}

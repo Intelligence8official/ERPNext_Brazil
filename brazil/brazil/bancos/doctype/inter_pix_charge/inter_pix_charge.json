@@ -1,0 +1,278 @@
+{
+    "actions": [],
+    "autoname": "naming_series:",
+    "allow_rename": 0,
+    "creation": "2026-02-09 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "naming_series",
+        "status",
+        "charge_type",
+        "column_break_header",
+        "company",
+        "inter_company_account",
+        "reference_section",
+        "sales_invoice",
+        "column_break_reference",
+        "payment_entry",
+        "pix_data_section",
+        "txid",
+        "e2e_id",
+        "chave_pix",
+        "column_break_pix_data",
+        "valor",
+        "data_criacao",
+        "data_expiracao",
+        "calendario_expiracao",
+        "qr_code_section",
+        "pix_copia_cola",
+        "column_break_qr",
+        "qrcode_image",
+        "payer_section",
+        "pagador_nome",
+        "pagador_cpf_cnpj",
+        "payment_section",
+        "valor_pago",
+        "data_pagamento",
+        "api_section",
+        "inter_response"
+    ],
+    "fields": [
+        {
+            "fieldname": "naming_series",
+            "fieldtype": "Select",
+            "label": "Series",
+            "options": "PIX-.YYYY.-.#####",
+            "default": "PIX-.YYYY.-.#####",
+            "hidden": 1
+        },
+        {
+            "fieldname": "status",
+            "fieldtype": "Select",
+            "label": "Status",
+            "options": "Pending\nActive\nPaid\nExpired\nCancelled",
+            "default": "Pending",
+            "in_list_view": 1,
+            "in_standard_filter": 1,
+            "read_only": 1
+        },
+        {
+            "fieldname": "charge_type",
+            "fieldtype": "Select",
+            "label": "Charge Type",
+            "options": "Immediate\nScheduled",
+            "default": "Immediate",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "column_break_header",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "company",
+            "fieldtype": "Link",
+            "label": "Company",
+            "options": "Company",
+            "reqd": 1,
+            "in_standard_filter": 1
+        },
+        {
+            "fieldname": "inter_company_account",
+            "fieldtype": "Link",
+            "label": "Inter Company Account",
+            "options": "Inter Company Account",
+            "reqd": 1
+        },
+        {
+            "fieldname": "reference_section",
+            "fieldtype": "Section Break",
+            "label": "Reference"
+        },
+        {
+            "fieldname": "sales_invoice",
+            "fieldtype": "Link",
+            "label": "Sales Invoice",
+            "options": "Sales Invoice",
+            "in_list_view": 1,
+            "in_standard_filter": 1
+        },
+        {
+            "fieldname": "column_break_reference",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "payment_entry",
+            "fieldtype": "Link",
+            "label": "Payment Entry",
+            "options": "Payment Entry",
+            "read_only": 1
+        },
+        {
+            "fieldname": "pix_data_section",
+            "fieldtype": "Section Break",
+            "label": "PIX Data"
+        },
+        {
+            "fieldname": "txid",
+            "fieldtype": "Data",
+            "label": "Transaction ID (txid)",
+            "in_list_view": 1,
+            "read_only": 1
+        },
+        {
+            "fieldname": "e2e_id",
+            "fieldtype": "Data",
+            "label": "End-to-End ID",
+            "read_only": 1
+        },
+        {
+            "fieldname": "chave_pix",
+            "fieldtype": "Data",
+            "label": "Chave PIX",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_pix_data",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "valor",
+            "fieldtype": "Currency",
+            "label": "Valor",
+            "reqd": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "data_criacao",
+            "fieldtype": "Datetime",
+            "label": "Data Criacao",
+            "read_only": 1
+        },
+        {
+            "fieldname": "data_expiracao",
+            "fieldtype": "Datetime",
+            "label": "Data Expiracao",
+            "read_only": 1
+        },
+        {
+            "fieldname": "calendario_expiracao",
+            "fieldtype": "Int",
+            "label": "Expiration (seconds)",
+            "default": "3600"
+        },
+        {
+            "fieldname": "qr_code_section",
+            "fieldtype": "Section Break",
+            "label": "QR Code"
+        },
+        {
+            "fieldname": "pix_copia_cola",
+            "fieldtype": "Small Text",
+            "label": "PIX Copia e Cola",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_qr",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "qrcode_image",
+            "fieldtype": "Attach Image",
+            "label": "QR Code Image",
+            "read_only": 1
+        },
+        {
+            "fieldname": "payer_section",
+            "fieldtype": "Section Break",
+            "label": "Payer"
+        },
+        {
+            "fieldname": "pagador_nome",
+            "fieldtype": "Data",
+            "label": "Nome"
+        },
+        {
+            "fieldname": "pagador_cpf_cnpj",
+            "fieldtype": "Data",
+            "label": "CPF/CNPJ"
+        },
+        {
+            "fieldname": "payment_section",
+            "fieldtype": "Section Break",
+            "label": "Payment"
+        },
+        {
+            "fieldname": "valor_pago",
+            "fieldtype": "Currency",
+            "label": "Valor Pago",
+            "read_only": 1
+        },
+        {
+            "fieldname": "data_pagamento",
+            "fieldtype": "Datetime",
+            "label": "Data Pagamento",
+            "read_only": 1
+        },
+        {
+            "fieldname": "api_section",
+            "fieldtype": "Section Break",
+            "label": "API Response",
+            "collapsible": 1
+        },
+        {
+            "fieldname": "inter_response",
+            "fieldtype": "Code",
+            "label": "API Response",
+            "options": "JSON",
+            "read_only": 1
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "links": [],
+    "modified": "2026-02-09 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Bancos",
+    "name": "Inter PIX Charge",
+    "naming_rule": "By \"Naming Series\" field",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "Banco Inter Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "email": 1,
+            "export": 1,
+            "print": 1,
+            "read": 1,
+            "report": 1,
+            "role": "Banco Inter User",
+            "write": 1
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "track_changes": 1
+}

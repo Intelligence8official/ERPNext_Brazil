@@ -1,0 +1,122 @@
+{
+    "actions": [],
+    "autoname": "hash",
+    "allow_rename": 0,
+    "creation": "2026-02-09 00:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "event_type",
+        "received_at",
+        "source_ip",
+        "column_break_1",
+        "processed",
+        "related_doctype",
+        "related_document",
+        "request_section",
+        "request_body",
+        "result_section",
+        "processing_result",
+        "error_message"
+    ],
+    "fields": [
+        {
+            "fieldname": "event_type",
+            "fieldtype": "Select",
+            "label": "Event Type",
+            "options": "boleto_paid\npix_received\nstatus_change\nunknown",
+            "in_list_view": 1,
+            "read_only": 1
+        },
+        {
+            "fieldname": "received_at",
+            "fieldtype": "Datetime",
+            "label": "Received At",
+            "in_list_view": 1,
+            "read_only": 1
+        },
+        {
+            "fieldname": "source_ip",
+            "fieldtype": "Data",
+            "label": "Source IP",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_1",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "0",
+            "fieldname": "processed",
+            "fieldtype": "Check",
+            "label": "Processed",
+            "in_list_view": 1,
+            "read_only": 1
+        },
+        {
+            "fieldname": "related_doctype",
+            "fieldtype": "Link",
+            "label": "Related DocType",
+            "options": "DocType",
+            "read_only": 1
+        },
+        {
+            "fieldname": "related_document",
+            "fieldtype": "Dynamic Link",
+            "label": "Related Document",
+            "options": "related_doctype",
+            "read_only": 1
+        },
+        {
+            "fieldname": "request_section",
+            "fieldtype": "Section Break",
+            "label": "Request Payload",
+            "collapsible": 1
+        },
+        {
+            "fieldname": "request_body",
+            "fieldtype": "Code",
+            "label": "Request Body",
+            "options": "JSON",
+            "read_only": 1
+        },
+        {
+            "fieldname": "result_section",
+            "fieldtype": "Section Break",
+            "label": "Processing Result"
+        },
+        {
+            "fieldname": "processing_result",
+            "fieldtype": "Small Text",
+            "label": "Processing Result",
+            "read_only": 1
+        },
+        {
+            "fieldname": "error_message",
+            "fieldtype": "Small Text",
+            "label": "Error Message",
+            "read_only": 1
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "links": [],
+    "modified": "2026-02-09 00:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Bancos",
+    "name": "Inter Webhook Log",
+    "naming_rule": "Random",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "read": 1,
+            "role": "System Manager"
+        },
+        {
+            "read": 1,
+            "role": "Banco Inter Manager"
+        }
+    ],
+    "sort_field": "received_at",
+    "sort_order": "DESC",
+    "track_changes": 0
+}
