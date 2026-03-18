@@ -1,5 +1,5 @@
 [project]
-name = "Brazil_Module"
+name = "brazil_module"
 version = "1.0.0"
 description = "Brazil ERP - Fiscal documents (NF-e, CT-e, NFS-e) and Banking integration for ERPNext"
 authors = [
@@ -22,7 +22,7 @@ requires = ["flit_core>=3.4"]
 build-backend = "flit_core.buildapi"
 
 [tool.pytest.ini_options]
-testpaths = ["Brazil_Module/tests"]
+testpaths = ["brazil_module/tests"]
 pythonpath = ["."]
 
 [tool.bench.frappe-dependencies]
