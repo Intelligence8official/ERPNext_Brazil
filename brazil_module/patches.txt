@@ -1,1 +1,1 @@
-brazil.patches.v1_0.migrate_from_old_apps
+brazil_module.patches.v1_0.migrate_from_old_apps

@@ -32,7 +32,7 @@ frappe.ui.form.on("Purchase Invoice", {
                 primary_action_label: __("Create Payment Order"),
                 primary_action(values) {
                     frappe.call({
-                        method: "brazil.api.create_payment_order",
+                        method: "brazil_module.api.create_payment_order",
                         args: {
                             payment_type: values.payment_type,
                             amount: frm.doc.outstanding_amount,

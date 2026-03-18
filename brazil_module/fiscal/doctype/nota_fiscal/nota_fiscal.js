@@ -400,7 +400,7 @@ function show_link_invoice_dialog(frm) {
         primary_action_label: __('Link'),
         primary_action: function(values) {
             frappe.call({
-                method: 'brazil.api.link_purchase_invoice',
+                method: 'brazil_module.api.link_purchase_invoice',
                 args: {
                     nota_fiscal_name: frm.doc.name,
                     purchase_invoice_name: values.purchase_invoice
@@ -425,7 +425,7 @@ function show_link_invoice_dialog(frm) {
 
 function find_matching_documents(frm) {
     frappe.call({
-        method: 'brazil.api.find_matching_documents',
+        method: 'brazil_module.api.find_matching_documents',
         args: {
             nota_fiscal_name: frm.doc.name
         },
@@ -501,7 +501,7 @@ function show_matching_documents_dialog(frm, matches) {
     dialog.$wrapper.find('.link-invoice').on('click', function() {
         const invoice_name = $(this).data('invoice');
         frappe.call({
-            method: 'brazil.api.link_purchase_invoice',
+            method: 'brazil_module.api.link_purchase_invoice',
             args: {
                 nota_fiscal_name: frm.doc.name,
                 purchase_invoice_name: invoice_name
@@ -535,7 +535,7 @@ function show_matching_documents_dialog(frm, matches) {
 
 function unlink_purchase_invoice(frm) {
     frappe.call({
-        method: 'brazil.api.unlink_purchase_invoice',
+        method: 'brazil_module.api.unlink_purchase_invoice',
         args: {
             nota_fiscal_name: frm.doc.name
         },

@@ -4,7 +4,7 @@ frappe.ui.form.on("Sales Invoice", {
 
         frm.add_custom_button(__("Generate BoletoPIX"), function () {
             frappe.call({
-                method: "brazil.api.create_boleto",
+                method: "brazil_module.api.create_boleto",
                 args: { sales_invoice: frm.doc.name },
                 freeze: true,
                 freeze_message: __("Generating BoletoPIX..."),
@@ -22,7 +22,7 @@ frappe.ui.form.on("Sales Invoice", {
 
         frm.add_custom_button(__("Generate PIX"), function () {
             frappe.call({
-                method: "brazil.api.create_pix_charge",
+                method: "brazil_module.api.create_pix_charge",
                 args: { sales_invoice: frm.doc.name },
                 freeze: true,
                 freeze_message: __("Generating PIX charge..."),

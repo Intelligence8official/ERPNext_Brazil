@@ -129,7 +129,7 @@ frappe.listview_settings['Nota Fiscal'] = {
                 __('Process {0} selected document(s)?', [selected.length]),
                 function() {
                     frappe.call({
-                        method: 'brazil.api.batch_process',
+                        method: 'brazil_module.api.batch_process',
                         args: {
                             documents: selected.map(d => d.name)
                         },
@@ -169,7 +169,7 @@ frappe.listview_settings['Nota Fiscal'] = {
 function show_fetch_dialog(listview) {
     // First, get list of enabled companies
     frappe.call({
-        method: 'brazil.api.get_enabled_companies',
+        method: 'brazil_module.api.get_enabled_companies',
         callback: function(r) {
             if (!r.message || r.message.length === 0) {
                 frappe.msgprint({
@@ -222,7 +222,7 @@ function show_fetch_dialog(listview) {
                     dialog.hide();
 
                     frappe.call({
-                        method: 'brazil.api.fetch_for_company',
+                        method: 'brazil_module.api.fetch_for_company',
                         args: {
                             company_settings_name: values.company_settings,
                             document_type: values.document_type || null
@@ -282,7 +282,7 @@ function show_fetch_dialog(listview) {
 
 function show_test_connection_dialog() {
     frappe.call({
-        method: 'brazil.api.get_enabled_companies',
+        method: 'brazil_module.api.get_enabled_companies',
         callback: function(r) {
             if (!r.message || r.message.length === 0) {
                 frappe.msgprint({
@@ -309,7 +309,7 @@ function show_test_connection_dialog() {
                 primary_action_label: __('Test'),
                 primary_action: function(values) {
                     frappe.call({
-                        method: 'brazil.api.test_company_connection',
+                        method: 'brazil_module.api.test_company_connection',
                         args: {
                             company_settings_name: values.company_settings
                         },

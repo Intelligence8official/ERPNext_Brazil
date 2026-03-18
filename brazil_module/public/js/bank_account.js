@@ -4,7 +4,7 @@ frappe.ui.form.on("Bank Account", {
 
         frm.add_custom_button(__("Sync Statements"), function () {
             frappe.call({
-                method: "brazil.api.sync_statements",
+                method: "brazil_module.api.sync_statements",
                 args: { company_account_name: frm.doc.inter_company_account },
                 freeze: true,
                 freeze_message: __("Syncing bank statements..."),
@@ -21,7 +21,7 @@ frappe.ui.form.on("Bank Account", {
 
         frm.add_custom_button(__("Fetch Balance"), function () {
             frappe.call({
-                method: "brazil.api.get_balance",
+                method: "brazil_module.api.get_balance",
                 args: { company_account_name: frm.doc.inter_company_account },
                 callback(r) {
                     if (r.message && r.message.status === "success") {

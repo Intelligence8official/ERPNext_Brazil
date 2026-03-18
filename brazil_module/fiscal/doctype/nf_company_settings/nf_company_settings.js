@@ -8,7 +8,7 @@ frappe.ui.form.on('NF Company Settings', {
             // Test Connection button - always show
             frm.add_custom_button(__('Test Connection'), function() {
                 frappe.call({
-                    method: 'brazil.fiscal.doctype.nf_company_settings.nf_company_settings.test_connection',
+                    method: 'brazil_module.fiscal.doctype.nf_company_settings.nf_company_settings.test_connection',
                     args: {
                         company_settings_name: frm.doc.name
                     },
@@ -52,7 +52,7 @@ frappe.ui.form.on('NF Company Settings', {
                     }
                 ], function(values) {
                     frappe.call({
-                        method: 'brazil.fiscal.doctype.nf_company_settings.nf_company_settings.fetch_documents',
+                        method: 'brazil_module.fiscal.doctype.nf_company_settings.nf_company_settings.fetch_documents',
                         args: {
                             company_settings_name: frm.doc.name,
                             document_type: values.document_type || null
