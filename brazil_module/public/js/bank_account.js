@@ -35,5 +35,27 @@ frappe.ui.form.on("Bank Account", {
                 },
             });
         }, __("Banco Inter"));
+
+        frm.add_custom_button(__("Reconcile Transactions"), function () {
+            frappe.call({
+                method: "brazil_module.api.reconcile_transactions",
+                args: { bank_account: frm.doc.name },
+                freeze: true,
+                freeze_message: __("Running auto-reconciliation..."),
+                callback(r) {
+                    if (r.message) {
+                        frappe.msgprint({
+                            title: __("Reconciliation Complete"),
+                            message: __("Matched: {0} | Unmatched: {1} | Errors: {2}", [
+                                r.message.matched,
+                                r.message.unmatched,
+                                r.message.errors,
+                            ]),
+                            indicator: r.message.matched > 0 ? "green" : "orange",
+                        });
+                    }
+                },
+            });
+        }, __("Banco Inter"));
     },
 });
