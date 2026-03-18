@@ -1,6 +1,6 @@
 {
     "charts": [],
-    "content": "[{\"id\":\"shortcuts0\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inter Company Account\",\"col\":4}},{\"id\":\"shortcuts\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inter Boleto\",\"col\":4}},{\"id\":\"shortcuts2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inter PIX Charge\",\"col\":4}},{\"id\":\"shortcuts3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inter Payment Order\",\"col\":4}},{\"id\":\"shortcuts4\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bank Transaction\",\"col\":4}}]",
+    "content": "[{\"id\":\"sc_settings\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Banco Inter Settings\",\"col\":4}},{\"id\":\"sc_account\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inter Company Account\",\"col\":4}},{\"id\":\"sc_boleto\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inter Boleto\",\"col\":4}},{\"id\":\"sc_pix\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inter PIX Charge\",\"col\":4}},{\"id\":\"sc_payment\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inter Payment Order\",\"col\":4}},{\"id\":\"sc_txn\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bank Transaction\",\"col\":4}}]",
     "creation": "2026-02-09 00:00:00.000000",
     "doctype": "Workspace",
     "for_user": "",
@@ -161,7 +161,7 @@
             "type": "Link"
         }
     ],
-    "modified": "2026-03-18 19:00:00.000000",
+    "modified": "2026-03-18 20:00:00.000000",
     "modified_by": "Administrator",
     "module": "Bancos",
     "name": "Bancos",
@@ -172,6 +172,12 @@
     "roles": [],
     "sequence_id": 1,
     "shortcuts": [
+        {
+            "label": "Banco Inter Settings",
+            "link_to": "Banco Inter Settings",
+            "type": "DocType",
+            "color": "Red"
+        },
         {
             "label": "Inter Company Account",
             "link_to": "Inter Company Account",
