@@ -1,6 +1,6 @@
 {
     "charts": [],
-    "content": "[{\"id\":\"shortcuts\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inter Boleto\",\"col\":4}},{\"id\":\"shortcuts2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inter PIX Charge\",\"col\":4}},{\"id\":\"shortcuts3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inter Payment Order\",\"col\":4}}]",
+    "content": "[{\"id\":\"shortcuts0\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inter Company Account\",\"col\":4}},{\"id\":\"shortcuts\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inter Boleto\",\"col\":4}},{\"id\":\"shortcuts2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inter PIX Charge\",\"col\":4}},{\"id\":\"shortcuts3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Inter Payment Order\",\"col\":4}},{\"id\":\"shortcuts4\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Bank Transaction\",\"col\":4}}]",
     "creation": "2026-02-09 00:00:00.000000",
     "doctype": "Workspace",
     "for_user": "",
@@ -54,6 +54,34 @@
             "link_to": "Inter Payment Order",
             "link_type": "DocType",
             "onboard": 1,
+            "type": "Link"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Extrato",
+            "link_count": 0,
+            "onboard": 0,
+            "type": "header"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Bank Transaction",
+            "link_count": 0,
+            "link_to": "Bank Transaction",
+            "link_type": "DocType",
+            "onboard": 1,
+            "type": "Link"
+        },
+        {
+            "hidden": 0,
+            "is_query_report": 0,
+            "label": "Bank Account",
+            "link_count": 0,
+            "link_to": "Bank Account",
+            "link_type": "DocType",
+            "onboard": 0,
             "type": "Link"
         },
         {
@@ -135,6 +163,12 @@
     "sequence_id": 1,
     "shortcuts": [
         {
+            "label": "Inter Company Account",
+            "link_to": "Inter Company Account",
+            "type": "DocType",
+            "color": "Grey"
+        },
+        {
             "label": "Inter Boleto",
             "link_to": "Inter Boleto",
             "type": "DocType",
@@ -151,6 +185,12 @@
             "link_to": "Inter Payment Order",
             "type": "DocType",
             "color": "Orange"
+        },
+        {
+            "label": "Bank Transaction",
+            "link_to": "Bank Transaction",
+            "type": "DocType",
+            "color": "Cyan"
         }
     ],
     "title": "Bancos"
