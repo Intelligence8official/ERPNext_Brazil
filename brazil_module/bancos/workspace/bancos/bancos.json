@@ -15,8 +15,10 @@
             "is_query_report": 0,
             "label": "Billing",
             "link_count": 0,
+            "link_to": "",
+            "link_type": "DocType",
             "onboard": 0,
-            "type": "header"
+            "type": "Card Break"
         },
         {
             "hidden": 0,
@@ -43,8 +45,10 @@
             "is_query_report": 0,
             "label": "Payments",
             "link_count": 0,
+            "link_to": "",
+            "link_type": "DocType",
             "onboard": 0,
-            "type": "header"
+            "type": "Card Break"
         },
         {
             "hidden": 0,
@@ -61,8 +65,10 @@
             "is_query_report": 0,
             "label": "Extrato",
             "link_count": 0,
+            "link_to": "",
+            "link_type": "DocType",
             "onboard": 0,
-            "type": "header"
+            "type": "Card Break"
         },
         {
             "hidden": 0,
@@ -81,7 +87,7 @@
             "link_count": 0,
             "link_to": "Bank Account",
             "link_type": "DocType",
-            "onboard": 0,
+            "onboard": 1,
             "type": "Link"
         },
         {
@@ -89,8 +95,10 @@
             "is_query_report": 0,
             "label": "Settings",
             "link_count": 0,
+            "link_to": "",
+            "link_type": "DocType",
             "onboard": 0,
-            "type": "header"
+            "type": "Card Break"
         },
         {
             "hidden": 0,
@@ -117,8 +125,10 @@
             "is_query_report": 0,
             "label": "Logs",
             "link_count": 0,
+            "link_to": "",
+            "link_type": "DocType",
             "onboard": 0,
-            "type": "header"
+            "type": "Card Break"
         },
         {
             "hidden": 0,
@@ -127,7 +137,7 @@
             "link_count": 0,
             "link_to": "Inter Sync Log",
             "link_type": "DocType",
-            "onboard": 0,
+            "onboard": 1,
             "type": "Link"
         },
         {
@@ -137,7 +147,7 @@
             "link_count": 0,
             "link_to": "Inter API Log",
             "link_type": "DocType",
-            "onboard": 0,
+            "onboard": 1,
             "type": "Link"
         },
         {
@@ -147,11 +157,11 @@
             "link_count": 0,
             "link_to": "Inter Webhook Log",
             "link_type": "DocType",
-            "onboard": 0,
+            "onboard": 1,
             "type": "Link"
         }
     ],
-    "modified": "2026-03-18 18:00:00.000000",
+    "modified": "2026-03-18 19:00:00.000000",
     "modified_by": "Administrator",
     "module": "Bancos",
     "name": "Bancos",
