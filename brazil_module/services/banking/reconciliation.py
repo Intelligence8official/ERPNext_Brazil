@@ -144,23 +144,26 @@ def _match_to_sales_invoice(amount: float, txn_date: date) -> dict | None:
     min_amount = amount * (1 - tolerance)
     max_amount = amount * (1 + tolerance)
 
-    # Look for Sales Invoices with matching outstanding amount
+    filters = {
+        "docstatus": 1,
+        "outstanding_amount": ["between", [min_amount, max_amount]],
+    }
+    if txn_date:
+        filters["posting_date"] = [">=", txn_date - timedelta(days=60)]
+
     invoices = frappe.get_all(
         "Sales Invoice",
-        filters={
-            "docstatus": 1,
-            "outstanding_amount": ["between", [min_amount, max_amount]],
-            "posting_date": [">=", txn_date - timedelta(days=60)] if txn_date else None,
-        },
+        filters=filters,
         fields=["name", "outstanding_amount", "posting_date"],
-        order_by="ABS(outstanding_amount - {0}) ASC".format(amount),
-        limit=1,
+        order_by="posting_date desc",
+        limit=10,
     )
 
     if invoices:
+        best = min(invoices, key=lambda inv: abs(flt(inv["outstanding_amount"]) - amount))
         return {
             "doctype": "Sales Invoice",
-            "name": invoices[0]["name"],
+            "name": best["name"],
             "amount": amount,
         }
     return None
@@ -174,22 +177,26 @@ def _match_to_purchase_invoice(amount: float, txn_date: date) -> dict | None:
     min_amount = amount * (1 - tolerance)
     max_amount = amount * (1 + tolerance)
 
+    filters = {
+        "docstatus": 1,
+        "outstanding_amount": ["between", [min_amount, max_amount]],
+    }
+    if txn_date:
+        filters["posting_date"] = [">=", txn_date - timedelta(days=60)]
+
     invoices = frappe.get_all(
         "Purchase Invoice",
-        filters={
-            "docstatus": 1,
-            "outstanding_amount": ["between", [min_amount, max_amount]],
-            "posting_date": [">=", txn_date - timedelta(days=60)] if txn_date else None,
-        },
+        filters=filters,
         fields=["name", "outstanding_amount", "posting_date"],
-        order_by="ABS(outstanding_amount - {0}) ASC".format(amount),
-        limit=1,
+        order_by="posting_date desc",
+        limit=10,
     )
 
     if invoices:
+        best = min(invoices, key=lambda inv: abs(flt(inv["outstanding_amount"]) - amount))
         return {
             "doctype": "Purchase Invoice",
-            "name": invoices[0]["name"],
+            "name": best["name"],
             "amount": amount,
         }
     return None
