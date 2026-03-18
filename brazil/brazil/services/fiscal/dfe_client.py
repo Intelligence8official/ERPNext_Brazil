@@ -474,30 +474,304 @@ def _fetch_nfse_documents(endpoint, cert_path, key_path, last_nsu, company_setti
 
 def _fetch_dfe_documents(endpoint, cert_path, key_path, last_nsu, document_type, company_settings, log):
     """
-    Fetch NF-e or CT-e documents using SOAP API.
+    Fetch NF-e or CT-e documents using SOAP DistDFeInt API.
 
-    Note: This is a placeholder - actual implementation would use
-    zeep or another SOAP library for the SEFAZ web services.
+    Uses mTLS (client certificate) authentication. The DistDFeInt operation
+    does NOT require XML digital signature - just the SOAP envelope over mTLS.
     """
-    # TODO: Implement SOAP-based NF-e/CT-e distribution fetch
-    # This would require:
-    # 1. Build SOAP envelope with distDFeInt request
-    # 2. Sign the request with digital certificate
-    # 3. Send to SEFAZ endpoint
-    # 4. Parse response and extract documents
+    import xml.etree.ElementTree as ET
 
-    frappe.logger().warning(
-        f"NF-e/CT-e SOAP fetch not yet implemented. "
-        f"Document type: {document_type}, Endpoint: {endpoint}"
+    # Determine SOAP parameters based on document type
+    if document_type == "NF-e":
+        ws_ns = "http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe"
+        schema_ns = "http://www.portalfiscal.inf.br/nfe"
+        soap_action = f"{ws_ns}/nfeDistDFeInteresse"
+    else:  # CT-e
+        ws_ns = "http://www.portalfiscal.inf.br/cte/wsdl/CTeDistribuicaoDFe"
+        schema_ns = "http://www.portalfiscal.inf.br/cte"
+        soap_action = f"{ws_ns}/cteDistDFeInteresse"
+
+    # Build SOAP envelope
+    env = company_settings.sefaz_environment or "production"
+    tpAmb = "1" if env == "production" else "2"
+    cUFAutor = company_settings.uf_code or "35"
+    cnpj = (company_settings.cnpj or "").replace(".", "").replace("/", "").replace("-", "")
+    ult_nsu = str(last_nsu or "0").zfill(15)
+
+    soap_envelope = _build_dist_dfe_request(tpAmb, cUFAutor, cnpj, ult_nsu, schema_ns)
+
+    frappe.logger().info(
+        f"{document_type} SOAP Fetch: endpoint={endpoint}, NSU={ult_nsu}, "
+        f"tpAmb={tpAmb}, cUFAutor={cUFAutor}"
     )
 
-    return {
-        "status": "not_implemented",
-        "fetched": 0,
-        "created": 0,
-        "skipped": 0,
-        "message": "SOAP-based fetch not yet implemented"
+    # Send SOAP request with mTLS
+    session = requests.Session()
+    session.cert = (cert_path, key_path)
+
+    headers = {
+        "Content-Type": "application/soap+xml; charset=utf-8",
+        "SOAPAction": soap_action,
     }
+
+    try:
+        response = session.post(endpoint, data=soap_envelope, headers=headers, timeout=60)
+    except requests.exceptions.SSLError as e:
+        frappe.logger().error(f"{document_type} SOAP Fetch: SSL error: {e}")
+        return {
+            "status": "error",
+            "fetched": 0, "created": 0, "skipped": 0,
+            "message": f"SSL/Certificate error: {e}",
+            "nsu_used": last_nsu,
+        }
+    except requests.exceptions.ConnectionError as e:
+        frappe.logger().error(f"{document_type} SOAP Fetch: Connection error: {e}")
+        return {
+            "status": "error",
+            "fetched": 0, "created": 0, "skipped": 0,
+            "message": f"Connection error: {e}",
+            "nsu_used": last_nsu,
+        }
+
+    frappe.logger().info(f"{document_type} SOAP Fetch: HTTP status={response.status_code}")
+
+    response.raise_for_status()
+
+    # Parse SOAP response
+    result = _parse_dist_dfe_response(response.content, schema_ns)
+
+    cStat = result.get("cStat", "")
+    xMotivo = result.get("xMotivo", "")
+    documents = result.get("documents", [])
+    max_nsu = result.get("maxNSU", "")
+    ult_nsu_resp = result.get("ultNSU", "")
+
+    frappe.logger().info(
+        f"{document_type} SOAP Fetch: cStat={cStat}, xMotivo={xMotivo}, "
+        f"docs={len(documents)}, maxNSU={max_nsu}, ultNSU={ult_nsu_resp}"
+    )
+
+    # cStat 137 = documents found, 138 = no new documents
+    if cStat == "138":
+        return {
+            "status": "success",
+            "fetched": 0, "created": 0, "skipped": 0,
+            "message": xMotivo,
+            "nsu_used": last_nsu,
+        }
+
+    if cStat not in ("137", "138"):
+        return {
+            "status": "error",
+            "fetched": 0, "created": 0, "skipped": 0,
+            "message": f"SEFAZ returned cStat={cStat}: {xMotivo}",
+            "nsu_used": last_nsu,
+        }
+
+    # Process documents
+    created = 0
+    skipped = 0
+    events_processed = 0
+    nsu_values = []
+
+    for doc_data in documents:
+        try:
+            nsu = doc_data.get("NSU")
+            schema = doc_data.get("schema", "")
+            xml_content = doc_data.get("xml_content")
+
+            if nsu:
+                nsu_values.append(nsu)
+
+            # Check if it's an event (cancellation, etc.)
+            if "evento" in schema.lower() or "resEvento" in schema:
+                # Extract chave from XML and process as event
+                chave = _extract_chave_from_xml(xml_content)
+                _process_evento(chave, schema, None)
+                events_processed += 1
+                continue
+
+            # Extract chave from XML for duplicate check
+            chave = _extract_chave_from_xml(xml_content)
+
+            if chave and frappe.db.exists("Nota Fiscal", {"chave_de_acesso": chave}):
+                existing = frappe.get_value("Nota Fiscal", {"chave_de_acesso": chave}, "name")
+                frappe.db.set_value("Nota Fiscal", existing, "origin_sefaz", 1)
+                skipped += 1
+                continue
+
+            if nsu and frappe.db.exists("Nota Fiscal", {"nsu": str(nsu), "company": company_settings.company}):
+                skipped += 1
+                continue
+
+            _create_nota_fiscal_from_xml(xml_content, document_type, company_settings, chave, nsu)
+            created += 1
+
+        except Exception as e:
+            frappe.log_error(str(e), f"Error processing {document_type} document")
+            log.update_counts(failed=1)
+
+    # Update NSU tracking
+    if nsu_values:
+        log.first_nsu = log.first_nsu or str(min(nsu_values))
+        log.last_nsu = str(max(nsu_values))
+        log.save(ignore_permissions=True)
+
+    # Update company's last NSU
+    if ult_nsu_resp:
+        try:
+            new_nsu = int(ult_nsu_resp)
+            old_nsu = int(last_nsu or 0)
+            if new_nsu > old_nsu:
+                company_settings.update_last_nsu(document_type, str(new_nsu))
+        except (ValueError, TypeError):
+            pass
+
+    log.update_counts(fetched=len(documents), created=created, skipped=skipped)
+
+    return {
+        "status": "success",
+        "fetched": len(documents),
+        "created": created,
+        "skipped": skipped,
+        "events": events_processed,
+        "nsu_used": last_nsu,
+    }
+
+
+def _build_dist_dfe_request(tpAmb, cUFAutor, cnpj, ultNSU, schema_ns):
+    """
+    Build SOAP 1.2 envelope for DistDFeInt (Distribution of DF-e) request.
+
+    Args:
+        tpAmb: Environment (1=Production, 2=Homologation)
+        cUFAutor: UF IBGE code of the requesting entity
+        cnpj: Company CNPJ (14 digits)
+        ultNSU: Last NSU received (15-digit zero-padded string)
+        schema_ns: XML schema namespace for the document type
+
+    Returns:
+        str: SOAP envelope XML string
+    """
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">'
+        '<soap12:Body>'
+        f'<nfeDistDFeInteresse xmlns="{schema_ns}">'
+        f'<distDFeInt xmlns="{schema_ns}">'
+        f'<tpAmb>{tpAmb}</tpAmb>'
+        f'<cUFAutor>{cUFAutor}</cUFAutor>'
+        f'<CNPJ>{cnpj}</CNPJ>'
+        f'<distNSU><ultNSU>{ultNSU}</ultNSU></distNSU>'
+        '</distDFeInt>'
+        '</nfeDistDFeInteresse>'
+        '</soap12:Body>'
+        '</soap12:Envelope>'
+    )
+
+
+def _parse_dist_dfe_response(response_content, schema_ns):
+    """
+    Parse SOAP response from DistDFeInt.
+
+    Extracts status code, documents (base64+gzip compressed), and NSU tracking.
+
+    Args:
+        response_content: Raw bytes of the SOAP response
+        schema_ns: XML schema namespace for the document type
+
+    Returns:
+        dict: Parsed response with cStat, xMotivo, documents list, maxNSU, ultNSU
+    """
+    import xml.etree.ElementTree as ET
+
+    result = {
+        "cStat": "",
+        "xMotivo": "",
+        "documents": [],
+        "maxNSU": "",
+        "ultNSU": "",
+    }
+
+    try:
+        root = ET.fromstring(response_content)
+    except ET.ParseError as e:
+        frappe.log_error(f"Failed to parse SOAP response: {e}", "DFe SOAP Parse Error")
+        result["cStat"] = "999"
+        result["xMotivo"] = f"XML parse error: {e}"
+        return result
+
+    # Search for retDistDFeInt element in any namespace
+    ret_element = None
+    for elem in root.iter():
+        tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+        if tag == "retDistDFeInt":
+            ret_element = elem
+            break
+
+    if ret_element is None:
+        result["cStat"] = "999"
+        result["xMotivo"] = "retDistDFeInt element not found in response"
+        return result
+
+    # Extract status fields by iterating children (namespace-agnostic)
+    for child in ret_element:
+        tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+        if tag == "cStat":
+            result["cStat"] = child.text or ""
+        elif tag == "xMotivo":
+            result["xMotivo"] = child.text or ""
+        elif tag == "maxNSU":
+            result["maxNSU"] = child.text or ""
+        elif tag == "ultNSU":
+            result["ultNSU"] = child.text or ""
+        elif tag == "loteDistDFeInt":
+            # Process each document in the lot
+            for doc_zip in child:
+                doc_tag = doc_zip.tag.split("}")[-1] if "}" in doc_zip.tag else doc_zip.tag
+                if doc_tag == "docZip":
+                    nsu = doc_zip.get("NSU", "")
+                    schema = doc_zip.get("schema", "")
+                    xml_b64 = doc_zip.text or ""
+
+                    xml_content = _decode_xml(xml_b64) if xml_b64 else None
+                    if xml_content:
+                        result["documents"].append({
+                            "NSU": nsu,
+                            "schema": schema,
+                            "xml_content": xml_content,
+                        })
+
+    return result
+
+
+def _extract_chave_from_xml(xml_content):
+    """
+    Extract chave de acesso from a parsed XML document.
+
+    Searches for Id attributes starting with NFe, CTe, or NFS.
+    """
+    import xml.etree.ElementTree as ET
+
+    if not xml_content:
+        return None
+
+    try:
+        root = ET.fromstring(xml_content)
+    except ET.ParseError:
+        return None
+
+    # Search all elements for Id attribute with known prefixes
+    for elem in root.iter():
+        id_attr = elem.get("Id", "")
+        if id_attr.startswith("NFe"):
+            return id_attr[3:]
+        if id_attr.startswith("CTe"):
+            return id_attr[3:]
+        if id_attr.startswith("NFS"):
+            return id_attr[3:]
+
+    return None
 
 
 def _decode_xml(xml_b64):

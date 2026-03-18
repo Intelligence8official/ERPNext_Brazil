@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cteProc xmlns="http://www.portalfiscal.inf.br/cte" versao="4.00">
+  <CTe>
+    <infCte versao="4.00" Id="CTe35220698765432000100570010000005001000000005">
+      <ide>
+        <nCT>500</nCT>
+        <serie>1</serie>
+        <dhEmi>2022-06-20T08:00:00-03:00</dhEmi>
+        <CFOP>6353</CFOP>
+        <natOp>Prestacao de Servico de Transporte</natOp>
+        <modal>01</modal>
+        <toma3>
+          <toma>3</toma>
+        </toma3>
+      </ide>
+      <emit>
+        <CNPJ>98765432000100</CNPJ>
+        <xNome>Transportadora Exemplo Ltda</xNome>
+        <IE>111222333</IE>
+        <enderEmit>
+          <UF>SP</UF>
+        </enderEmit>
+      </emit>
+      <rem>
+        <CNPJ>12223333000155</CNPJ>
+        <xNome>Remetente Industria SA</xNome>
+      </rem>
+      <dest>
+        <CNPJ>44556677000188</CNPJ>
+        <xNome>Destinatario Comercio Ltda</xNome>
+      </dest>
+      <vPrest>
+        <vTPrest>1500.00</vTPrest>
+        <vRec>1500.00</vRec>
+      </vPrest>
+      <imp>
+        <ICMS>
+          <ICMS00>
+            <CST>00</CST>
+            <vBC>1500.00</vBC>
+            <pICMS>12.00</pICMS>
+            <vICMS>180.00</vICMS>
+          </ICMS00>
+        </ICMS>
+      </imp>
+      <infCarga>
+        <vCarga>50000.00</vCarga>
+        <proPred>Pecas Automotivas</proPred>
+      </infCarga>
+    </infCte>
+  </CTe>
+</cteProc>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CompNfse>
+  <Nfse>
+    <InfNfse>
+      <Numero>54321</Numero>
+      <DataEmissao>2024-03-20</DataEmissao>
+      <Prestador>
+        <Cnpj>11222333000181</Cnpj>
+        <InscricaoMunicipal>98765</InscricaoMunicipal>
+        <RazaoSocial>Empresa Prestadora ABRASF Ltda</RazaoSocial>
+      </Prestador>
+      <Tomador>
+        <Cnpj>44556677000188</Cnpj>
+        <RazaoSocial>Tomador ABRASF SA</RazaoSocial>
+      </Tomador>
+      <Servico>
+        <Valores>
+          <ValorServicos>3500.00</ValorServicos>
+          <ValorIss>175.00</ValorIss>
+          <Aliquota>5.00</Aliquota>
+        </Valores>
+        <ItemListaServico>14.01</ItemListaServico>
+        <Discriminacao>Servico de Manutencao de Software</Discriminacao>
+      </Servico>
+    </InfNfse>
+  </Nfse>
+</CompNfse>

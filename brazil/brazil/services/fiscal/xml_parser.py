@@ -274,8 +274,89 @@ class NFXMLParser:
             "document_type": "CT-e"
         }
 
-        # TODO: Implement CT-e parsing
-        # Similar structure to NF-e but with transport-specific fields
+        ns = {"n": self.namespace}
+
+        # Find infCte element
+        inf_cte = self.root.find(".//n:infCte", ns)
+        if inf_cte is None:
+            inf_cte = self.root.find(".//{%s}infCte" % self.namespace)
+        if inf_cte is None:
+            inf_cte = self.root.find(".//infCte")
+        if inf_cte is None:
+            inf_cte = self.root
+
+        # Extract chave de acesso from Id attribute
+        id_attr = inf_cte.get("Id", "")
+        if id_attr.startswith("CTe"):
+            data["chave_de_acesso"] = id_attr[3:]
+
+        # Identification
+        data["numero"] = self._find_text(inf_cte, [".//n:ide/n:nCT", ".//ide/nCT", "nCT"])
+        data["serie"] = self._find_text(inf_cte, [".//n:ide/n:serie", ".//ide/serie"])
+        data["data_emissao"] = self._parse_date(
+            self._find_text(inf_cte, [".//n:ide/n:dhEmi", ".//ide/dhEmi", "dhEmi"])
+        )
+        data["cfop"] = self._find_text(inf_cte, [".//n:ide/n:CFOP", ".//ide/CFOP"])
+        data["natureza_operacao"] = self._find_text(inf_cte, [".//n:ide/n:natOp", ".//ide/natOp"])
+        data["modal"] = self._find_text(inf_cte, [".//n:ide/n:modal", ".//ide/modal"])
+
+        # Emitente (Carrier)
+        data["emitente_cnpj"] = self._find_text(inf_cte, [".//n:emit/n:CNPJ", ".//emit/CNPJ"])
+        data["emitente_razao_social"] = self._find_text(inf_cte, [".//n:emit/n:xNome", ".//emit/xNome"])
+        data["emitente_ie"] = self._find_text(inf_cte, [".//n:emit/n:IE", ".//emit/IE"])
+        data["emitente_uf"] = self._find_text(inf_cte, [".//n:emit/n:enderEmit/n:UF", ".//emit/enderEmit/UF"])
+
+        # Remetente (Sender)
+        data["remetente_cnpj"] = self._find_text(inf_cte, [".//n:rem/n:CNPJ", ".//rem/CNPJ"])
+        data["remetente_razao_social"] = self._find_text(inf_cte, [".//n:rem/n:xNome", ".//rem/xNome"])
+
+        # Destinatario (Recipient)
+        data["tomador_cnpj"] = self._find_text(inf_cte, [".//n:dest/n:CNPJ", ".//dest/CNPJ"])
+        data["tomador_razao_social"] = self._find_text(inf_cte, [".//n:dest/n:xNome", ".//dest/xNome"])
+
+        # Tomador indicator (0=Remetente, 1=Expedidor, 2=Recebedor, 3=Destinatario)
+        data["tomador_tipo"] = self._find_text(inf_cte, [
+            ".//n:ide/n:toma3/n:toma", ".//ide/toma3/toma",
+            ".//n:ide/n:toma4/n:toma", ".//ide/toma4/toma"
+        ])
+
+        # Values
+        data["valor_total"] = self._parse_currency(
+            self._find_text(inf_cte, [".//n:vPrest/n:vTPrest", ".//vPrest/vTPrest"])
+        )
+        data["valor_receber"] = self._parse_currency(
+            self._find_text(inf_cte, [".//n:vPrest/n:vRec", ".//vPrest/vRec"])
+        )
+
+        # ICMS
+        data["valor_icms"] = self._parse_currency(
+            self._find_text(inf_cte, [".//n:imp/n:ICMS//n:vICMS", ".//imp/ICMS//vICMS"])
+        )
+        data["valor_bc_icms"] = self._parse_currency(
+            self._find_text(inf_cte, [".//n:imp/n:ICMS//n:vBC", ".//imp/ICMS//vBC"])
+        )
+        data["icms_aliquota"] = self._parse_float(
+            self._find_text(inf_cte, [".//n:imp/n:ICMS//n:pICMS", ".//imp/ICMS//pICMS"])
+        )
+
+        # Cargo info
+        data["valor_carga"] = self._parse_currency(
+            self._find_text(inf_cte, [".//n:infCarga/n:vCarga", ".//infCarga/vCarga"])
+        )
+        data["produto_predominante"] = self._find_text(inf_cte, [
+            ".//n:infCarga/n:proPred", ".//infCarga/proPred"
+        ])
+
+        # Create single transport service item
+        data["items"] = [{
+            "numero_item": "1",
+            "codigo_produto": "",
+            "descricao": f"Frete - CT-e {data.get('numero', '')}".strip(),
+            "quantidade": 1,
+            "valor_unitario": data.get("valor_total") or 0.0,
+            "valor_total": data.get("valor_total") or 0.0,
+            "unidade": "UN",
+        }]
 
         return data
 
@@ -447,19 +528,18 @@ class NFXMLParser:
     def _parse_date(self, date_str):
         """
         Parse date string to date object.
+
+        Handles ISO 8601 dates with or without timezone offsets.
         """
         if not date_str:
             return None
 
-        # Try ISO format with timezone
-        for fmt in ["%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"]:
-            try:
-                # Handle timezone with colon (e.g., -03:00)
-                clean_date = date_str.replace(":", "").replace("T", " ")[:19]
-                dt = datetime.strptime(clean_date, fmt.replace(":", "").replace("T", " ")[:19].replace("%z", ""))
-                return dt.date()
-            except ValueError:
-                continue
+        # Extract just the date portion (YYYY-MM-DD) from any ISO format
+        # Works for: "2022-06-15", "2022-06-15T10:30:00", "2022-06-15T10:30:00-03:00"
+        try:
+            return datetime.strptime(date_str[:10], "%Y-%m-%d").date()
+        except ValueError:
+            pass
 
         return None
 

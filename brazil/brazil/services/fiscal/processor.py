@@ -203,7 +203,42 @@ def cleanup_old_logs():
 
 def cleanup_processed_xmls():
     """
-    Weekly job to clean up processed XML files.
+    Weekly job to clean up processed XML content from fully-processed Notas Fiscais.
+
+    Clears the xml_content field on completed NFs older than the configured
+    retention period (default 90 days) to free database storage. The parsed
+    fields and chave_de_acesso are preserved.
     """
-    # TODO: Implement XML cleanup logic
-    pass
+    settings = frappe.get_single("Nota Fiscal Settings")
+    retention_days = getattr(settings, "xml_retention_days", None) or 90
+
+    cutoff_date = frappe.utils.add_days(frappe.utils.today(), -int(retention_days))
+
+    # Find completed NFs with XML content older than the retention period
+    nfs = frappe.get_all(
+        "Nota Fiscal",
+        filters={
+            "processing_status": "Completed",
+            "xml_content": ["is", "set"],
+            "creation": ["<", cutoff_date],
+        },
+        pluck="name",
+        limit=500,
+    )
+
+    if not nfs:
+        return 0
+
+    count = 0
+    for nf_name in nfs:
+        try:
+            frappe.db.set_value("Nota Fiscal", nf_name, "xml_content", "", update_modified=False)
+            count += 1
+        except Exception as e:
+            frappe.log_error(str(e), f"XML Cleanup Error: {nf_name}")
+
+    if count:
+        frappe.db.commit()
+        frappe.logger().info(f"Cleaned up XML content from {count} Notas Fiscais")
+
+    return count

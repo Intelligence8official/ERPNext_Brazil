@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">
+  <NFe>
+    <infNFe versao="4.00" Id="NFe35220612223333000155550010000000011000000019">
+      <ide>
+        <nNF>1</nNF>
+        <serie>1</serie>
+        <dhEmi>2022-06-15T10:30:00-03:00</dhEmi>
+      </ide>
+      <emit>
+        <CNPJ>12223333000155</CNPJ>
+        <xNome>Empresa Teste Ltda</xNome>
+        <IE>123456789</IE>
+        <enderEmit>
+          <UF>SP</UF>
+        </enderEmit>
+      </emit>
+      <dest>
+        <CNPJ>98765432000100</CNPJ>
+        <xNome>Destinatario Teste SA</xNome>
+        <IE>987654321</IE>
+      </dest>
+      <det nItem="1">
+        <prod>
+          <cProd>PROD001</cProd>
+          <cEAN>7891234567890</cEAN>
+          <xProd>Produto Teste A</xProd>
+          <NCM>84719012</NCM>
+          <CFOP>5102</CFOP>
+          <uCom>UN</uCom>
+          <qCom>10.0000</qCom>
+          <vUnCom>150.00</vUnCom>
+          <vProd>1500.00</vProd>
+        </prod>
+        <imposto>
+          <ICMS>
+            <ICMS00>
+              <CST>00</CST>
+              <vBC>1500.00</vBC>
+              <pICMS>18.00</pICMS>
+              <vICMS>270.00</vICMS>
+            </ICMS00>
+          </ICMS>
+        </imposto>
+      </det>
+      <det nItem="2">
+        <prod>
+          <cProd>PROD002</cProd>
+          <cEAN>SEM GTIN</cEAN>
+          <xProd>Produto Teste B</xProd>
+          <NCM>39269090</NCM>
+          <CFOP>5102</CFOP>
+          <uCom>CX</uCom>
+          <qCom>5.0000</qCom>
+          <vUnCom>100.00</vUnCom>
+          <vProd>500.00</vProd>
+        </prod>
+        <imposto>
+          <ICMS>
+            <ICMS00>
+              <CST>00</CST>
+              <vBC>500.00</vBC>
+              <pICMS>18.00</pICMS>
+              <vICMS>90.00</vICMS>
+            </ICMS00>
+          </ICMS>
+        </imposto>
+      </det>
+      <total>
+        <ICMSTot>
+          <vBC>2000.00</vBC>
+          <vICMS>360.00</vICMS>
+          <vIPI>0.00</vIPI>
+          <vPIS>13.00</vPIS>
+          <vCOFINS>60.00</vCOFINS>
+          <vProd>2000.00</vProd>
+          <vFrete>50.00</vFrete>
+          <vDesc>30.00</vDesc>
+          <vNF>2020.00</vNF>
+        </ICMSTot>
+      </total>
+    </infNFe>
+  </NFe>
+</nfeProc>

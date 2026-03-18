@@ -1,5 +1,6 @@
 # Brazil API Endpoints
 # Combined Fiscal + Banking endpoints
+import hmac
 import json
 
 import frappe
@@ -606,7 +607,7 @@ def webhook_receiver() -> dict:
     webhook_secret = frappe.db.get_single_value("Banco Inter Settings", "webhook_secret")
     if webhook_secret:
         request_secret = frappe.request.headers.get("X-Webhook-Secret", "")
-        if request_secret != webhook_secret:
+        if not hmac.compare_digest(request_secret, webhook_secret):
             frappe.local.response["http_status_code"] = 403
             return {"status": "forbidden"}
 

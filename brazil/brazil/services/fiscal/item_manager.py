@@ -198,9 +198,13 @@ class ItemManager:
     def _description_matches(self, item_name, nf_description):
         """
         Check if item name loosely matches NF description.
+
+        Uses both word-overlap and sequence similarity for robust matching.
         """
         if not item_name or not nf_description:
             return False
+
+        from difflib import SequenceMatcher
 
         # Normalize strings
         item_lower = item_name.lower().strip()
@@ -210,19 +214,19 @@ class ItemManager:
         if item_lower == nf_lower:
             return True
 
-        # Simple word matching
-        item_words = set(item_lower.split())
-        nf_words = set(nf_lower.split())
+        # Sequence similarity (handles typos, abbreviations, reordering)
+        ratio = SequenceMatcher(None, item_lower, nf_lower).ratio()
+        if ratio >= 0.7:
+            return True
 
-        # Remove common stop words
+        # Word-overlap matching
         stop_words = {'de', 'da', 'do', 'das', 'dos', 'em', 'para', 'com', 'e', 'ou', 'a', 'o', 'as', 'os'}
-        item_words = item_words - stop_words
-        nf_words = nf_words - stop_words
+        item_words = set(item_lower.split()) - stop_words
+        nf_words = set(nf_lower.split()) - stop_words
 
         if not item_words or not nf_words:
             return False
 
-        # At least 50% of words should match
         common = item_words.intersection(nf_words)
         min_words = min(len(item_words), len(nf_words))
         return len(common) >= min_words * 0.5

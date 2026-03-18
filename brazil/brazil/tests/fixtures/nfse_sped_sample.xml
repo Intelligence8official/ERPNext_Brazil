@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<NFSe xmlns="http://www.sped.fazenda.gov.br/nfse">
+  <infNFSe Id="NFS12345678901234567890123456789012345678901234567">
+    <nNFSe>12345</nNFSe>
+    <emit>
+      <CNPJ>11222333000181</CNPJ>
+      <xNome>Prestador Servico Ltda</xNome>
+      <enderNac>
+        <cMun>3550308</cMun>
+      </enderNac>
+    </emit>
+    <valores>
+      <vBC>5000.00</vBC>
+      <vISSQN>250.00</vISSQN>
+      <pAliqAplic>5.00</pAliqAplic>
+      <vLiq>4750.00</vLiq>
+    </valores>
+  </infNFSe>
+  <DPS>
+    <dhEmi>2024-03-15T14:00:00-03:00</dhEmi>
+  </DPS>
+  <prest>
+    <IM>12345</IM>
+  </prest>
+  <toma>
+    <CNPJ>98765432000100</CNPJ>
+    <xNome>Tomador Servico SA</xNome>
+  </toma>
+  <cServ>
+    <cTribNac>01.01</cTribNac>
+    <cTribMun>1401</cTribMun>
+    <cNBS>123456</cNBS>
+    <xDescServ>Servico de Consultoria em TI</xDescServ>
+  </cServ>
+  <vServPrest>
+    <vServ>5000.00</vServ>
+  </vServPrest>
+  <totTrib>
+    <vTotTribFed>325.00</vTotTribFed>
+    <vTotTribEst>0.00</vTotTribEst>
+    <vTotTribMun>250.00</vTotTribMun>
+  </totTrib>
+  <regTrib>
+    <opSimpNac>3</opSimpNac>
+  </regTrib>
+</NFSe>
