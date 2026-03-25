@@ -361,20 +361,25 @@ def setup_workspace():
 
     Centralizes Agent, Fiscal, and Banking under one workspace.
     """
-    # ── Cleanup old entries ──
+    # ── Cleanup old entries (Sidebar BEFORE Workspace to avoid link errors) ──
+    for old_name in ("Fiscal", "Bancos", "Intelligence", "Intelligence8"):
+        if frappe.db.exists("Workspace Sidebar", old_name):
+            frappe.delete_doc("Workspace Sidebar", old_name, ignore_permissions=True, force=True)
     for old_name in ("Fiscal", "Bancos", "Intelligence"):
         if frappe.db.exists("Workspace", old_name):
             frappe.db.set_value("Workspace", old_name, "is_hidden", 1)
-        if frappe.db.exists("Workspace Sidebar", old_name):
-            frappe.delete_doc("Workspace Sidebar", old_name, ignore_permissions=True)
 
     # Also rename old Module Def if exists
     if frappe.db.exists("Module Def", "Intelligence") and not frappe.db.exists("Module Def", "Intelligence8"):
         frappe.rename_doc("Module Def", "Intelligence", "Intelligence8", force=True)
 
-    # ── Workspace (name MUST = Module Def name) ──
+    # ── Workspace (delete sidebar first, then workspace) ──
     if frappe.db.exists("Workspace", "Intelligence8"):
-        frappe.delete_doc("Workspace", "Intelligence8", ignore_permissions=True)
+        # Use SQL to avoid link validation errors
+        frappe.db.sql("DELETE FROM `tabWorkspace Shortcut` WHERE parent = 'Intelligence8'")
+        frappe.db.sql("DELETE FROM `tabWorkspace Link` WHERE parent = 'Intelligence8'")
+        frappe.db.sql("DELETE FROM `tabWorkspace` WHERE name = 'Intelligence8'")
+        frappe.db.commit()
 
     ws = frappe.new_doc("Workspace")
     ws.name = "Intelligence8"
