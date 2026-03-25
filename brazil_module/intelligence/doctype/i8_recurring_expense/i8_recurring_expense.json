@@ -1,33 +1,90 @@
 {
     "actions": [],
     "allow_rename": 0,
+    "autoname": "format:{title} - {supplier_name}",
     "creation": "2026-03-25 10:00:00.000000",
     "doctype": "DocType",
     "engine": "InnoDB",
     "field_order": [
+        "status_section",
+        "active",
+        "column_break_status",
+        "next_due",
+        "last_created",
+        "reference_section",
         "title",
         "supplier",
+        "supplier_name",
+        "column_break_ref",
         "document_type",
-        "estimated_amount",
-        "currency",
+        "company",
+        "schedule_section",
         "frequency",
         "day_of_month",
+        "column_break_schedule",
         "lead_days",
-        "notify_supplier",
-        "follow_up_after_days",
-        "max_follow_ups",
-        "auto_pay",
-        "payment_method",
+        "start_date",
+        "end_date",
+        "amount_section",
+        "estimated_amount",
+        "currency",
+        "column_break_amount",
         "amount_tolerance_percent",
         "confidence_threshold",
+        "items_section",
+        "items",
+        "supplier_communication_section",
+        "notify_supplier",
+        "follow_up_after_days",
+        "column_break_followup",
+        "max_follow_ups",
+        "follow_up_interval_days",
+        "payment_section",
+        "auto_pay",
+        "payment_method",
+        "column_break_payment",
         "cost_center",
         "department",
-        "active",
-        "items",
-        "last_created",
-        "next_due"
+        "accounting_section",
+        "expense_account"
     ],
     "fields": [
+        {
+            "fieldname": "status_section",
+            "fieldtype": "Section Break",
+            "label": ""
+        },
+        {
+            "default": "1",
+            "fieldname": "active",
+            "fieldtype": "Check",
+            "label": "Active",
+            "in_list_view": 1,
+            "bold": 1
+        },
+        {
+            "fieldname": "column_break_status",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "next_due",
+            "fieldtype": "Date",
+            "label": "Next Due",
+            "read_only": 1,
+            "in_list_view": 1,
+            "bold": 1
+        },
+        {
+            "fieldname": "last_created",
+            "fieldtype": "Date",
+            "label": "Last Created",
+            "read_only": 1
+        },
+        {
+            "fieldname": "reference_section",
+            "fieldtype": "Section Break",
+            "label": "Reference"
+        },
         {
             "fieldname": "title",
             "fieldtype": "Data",
@@ -44,17 +101,85 @@
             "in_list_view": 1
         },
         {
+            "fieldname": "supplier_name",
+            "fieldtype": "Data",
+            "label": "Supplier Name",
+            "fetch_from": "supplier.supplier_name",
+            "read_only": 1
+        },
+        {
+            "fieldname": "column_break_ref",
+            "fieldtype": "Column Break"
+        },
+        {
             "fieldname": "document_type",
             "fieldtype": "Select",
             "label": "Document Type",
             "options": "Purchase Order\nJournal Entry",
+            "reqd": 1,
+            "default": "Purchase Order"
+        },
+        {
+            "fieldname": "company",
+            "fieldtype": "Link",
+            "label": "Company",
+            "options": "Company"
+        },
+        {
+            "fieldname": "schedule_section",
+            "fieldtype": "Section Break",
+            "label": "Schedule"
+        },
+        {
+            "default": "Monthly",
+            "fieldname": "frequency",
+            "fieldtype": "Select",
+            "label": "Frequency",
+            "options": "Monthly\nWeekly\nQuarterly\nYearly",
+            "in_list_view": 1,
             "reqd": 1
+        },
+        {
+            "default": "1",
+            "fieldname": "day_of_month",
+            "fieldtype": "Int",
+            "label": "Day of Month",
+            "description": "Day the expense is due each period"
+        },
+        {
+            "fieldname": "column_break_schedule",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "10",
+            "fieldname": "lead_days",
+            "fieldtype": "Int",
+            "label": "Create Document (days before)",
+            "description": "PO will be created this many days before the due date"
+        },
+        {
+            "fieldname": "start_date",
+            "fieldtype": "Date",
+            "label": "Start Date"
+        },
+        {
+            "fieldname": "end_date",
+            "fieldtype": "Date",
+            "label": "End Date",
+            "description": "Leave blank for no end date"
+        },
+        {
+            "fieldname": "amount_section",
+            "fieldtype": "Section Break",
+            "label": "Amount"
         },
         {
             "fieldname": "estimated_amount",
             "fieldtype": "Currency",
             "label": "Estimated Amount",
-            "reqd": 1
+            "reqd": 1,
+            "in_list_view": 1,
+            "bold": 1
         },
         {
             "default": "BRL",
@@ -64,36 +189,54 @@
             "options": "Currency"
         },
         {
-            "default": "Monthly",
-            "fieldname": "frequency",
-            "fieldtype": "Select",
-            "label": "Frequency",
-            "options": "Monthly\nWeekly\nQuarterly\nYearly",
-            "in_list_view": 1
+            "fieldname": "column_break_amount",
+            "fieldtype": "Column Break"
         },
         {
-            "default": "1",
-            "fieldname": "day_of_month",
-            "fieldtype": "Int",
-            "label": "Day of Month"
+            "default": "5",
+            "fieldname": "amount_tolerance_percent",
+            "fieldtype": "Float",
+            "label": "Amount Tolerance (%)",
+            "description": "NF amount can vary by this % without requiring approval"
         },
         {
-            "default": "10",
-            "fieldname": "lead_days",
-            "fieldtype": "Int",
-            "label": "Lead Days"
+            "fieldname": "confidence_threshold",
+            "fieldtype": "Float",
+            "label": "Confidence Threshold Override",
+            "description": "Override global threshold for this expense. Leave blank to use default."
+        },
+        {
+            "fieldname": "items_section",
+            "fieldtype": "Section Break",
+            "label": "Items"
+        },
+        {
+            "fieldname": "items",
+            "fieldtype": "Table",
+            "label": "Items",
+            "options": "I8 Recurring Expense Item"
+        },
+        {
+            "fieldname": "supplier_communication_section",
+            "fieldtype": "Section Break",
+            "label": "Supplier Communication"
         },
         {
             "default": "0",
             "fieldname": "notify_supplier",
             "fieldtype": "Check",
-            "label": "Notify Supplier"
+            "label": "Notify Supplier on PO Creation"
         },
         {
             "default": "7",
             "fieldname": "follow_up_after_days",
             "fieldtype": "Int",
-            "label": "Follow Up After (days)"
+            "label": "Follow Up After (days)",
+            "description": "Days after PO creation to follow up if NF not received"
+        },
+        {
+            "fieldname": "column_break_followup",
+            "fieldtype": "Column Break"
         },
         {
             "default": "3",
@@ -102,27 +245,32 @@
             "label": "Max Follow Ups"
         },
         {
+            "default": "3",
+            "fieldname": "follow_up_interval_days",
+            "fieldtype": "Int",
+            "label": "Follow Up Interval (days)"
+        },
+        {
+            "fieldname": "payment_section",
+            "fieldtype": "Section Break",
+            "label": "Payment"
+        },
+        {
             "default": "0",
             "fieldname": "auto_pay",
             "fieldtype": "Check",
-            "label": "Auto Pay"
+            "label": "Auto Pay When NF Arrives"
         },
         {
             "fieldname": "payment_method",
             "fieldtype": "Select",
             "label": "Payment Method",
-            "options": "PIX\nTED\nBoleto"
+            "options": "\nPIX\nTED\nBoleto",
+            "depends_on": "auto_pay"
         },
         {
-            "default": "5",
-            "fieldname": "amount_tolerance_percent",
-            "fieldtype": "Float",
-            "label": "Amount Tolerance (%)"
-        },
-        {
-            "fieldname": "confidence_threshold",
-            "fieldtype": "Float",
-            "label": "Confidence Threshold"
+            "fieldname": "column_break_payment",
+            "fieldtype": "Column Break"
         },
         {
             "fieldname": "cost_center",
@@ -137,38 +285,30 @@
             "options": "Department"
         },
         {
-            "default": "1",
-            "fieldname": "active",
-            "fieldtype": "Check",
-            "label": "Active",
-            "in_list_view": 1
+            "fieldname": "accounting_section",
+            "fieldtype": "Section Break",
+            "label": "Accounting",
+            "collapsible": 1
         },
         {
-            "fieldname": "items",
-            "fieldtype": "Table",
-            "label": "Items",
-            "options": "I8 Recurring Expense Item"
-        },
-        {
-            "fieldname": "last_created",
-            "fieldtype": "Date",
-            "label": "Last Created",
-            "read_only": 1
-        },
-        {
-            "fieldname": "next_due",
-            "fieldtype": "Date",
-            "label": "Next Due",
-            "read_only": 1
+            "fieldname": "expense_account",
+            "fieldtype": "Link",
+            "label": "Default Expense Account",
+            "options": "Account"
         }
     ],
     "index_web_pages_for_search": 0,
-    "links": [],
-    "modified": "2026-03-25 10:00:00.000000",
+    "links": [
+        {
+            "link_doctype": "Purchase Order",
+            "link_fieldname": "i8_recurring_expense"
+        }
+    ],
+    "modified": "2026-03-25 16:00:00.000000",
     "modified_by": "Administrator",
     "module": "Intelligence",
     "name": "I8 Recurring Expense",
-    "naming_rule": "Random",
+    "naming_rule": "By fieldname",
     "owner": "Administrator",
     "permissions": [
         {
@@ -199,5 +339,6 @@
     "sort_field": "modified",
     "sort_order": "DESC",
     "states": [],
-    "track_changes": 0
+    "title_field": "title",
+    "track_changes": 1
 }
