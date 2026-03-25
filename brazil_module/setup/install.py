@@ -261,7 +261,7 @@ def create_custom_fields():
 
     _create_fields(fiscal_fields, module="Fiscal")
     _create_fields(banking_fields, module="Bancos")
-    _create_fields(intelligence_fields, module="Intelligence")
+    _create_fields(intelligence_fields, module="Intelligence8")
 
 
 def _create_fields(fields_dict, module):
@@ -353,36 +353,34 @@ def create_roles():
 def setup_workspace():
     """Ensure Intelligence8 workspace and sidebar exist.
 
-    Frappe 16 requires:
-    - Workspace name MUST match Module Def name for desk visibility
-    - Workspace Sidebar (separate DocType) controls the sidebar menu
-    - Workspace Sidebar.app must be set for standard sidebars
+    Frappe 16 requires three aligned components:
+    - Module Def name = "Intelligence8" (from modules.txt)
+    - Workspace name = "Intelligence8" (must match Module Def)
+    - Workspace Sidebar name = "Intelligence8" (must match for Desktop Icon link)
+    - Desktop Icon link_to = "Intelligence8" (links to Workspace Sidebar)
 
-    Centralizes Agent, Fiscal, and Banking under one "Intelligence" module.
-    Hides old Fiscal and Bancos workspaces/sidebars.
+    Centralizes Agent, Fiscal, and Banking under one workspace.
     """
     # ── Cleanup old entries ──
-    for old_name in ("Fiscal", "Bancos"):
+    for old_name in ("Fiscal", "Bancos", "Intelligence"):
         if frappe.db.exists("Workspace", old_name):
             frappe.db.set_value("Workspace", old_name, "is_hidden", 1)
         if frappe.db.exists("Workspace Sidebar", old_name):
             frappe.delete_doc("Workspace Sidebar", old_name, ignore_permissions=True)
 
-    # Cleanup legacy "Intelligence8" names (renamed to "Intelligence")
-    if frappe.db.exists("Workspace", "Intelligence8"):
-        frappe.delete_doc("Workspace", "Intelligence8", ignore_permissions=True)
-    if frappe.db.exists("Workspace Sidebar", "Intelligence8"):
-        frappe.delete_doc("Workspace Sidebar", "Intelligence8", ignore_permissions=True)
+    # Also rename old Module Def if exists
+    if frappe.db.exists("Module Def", "Intelligence") and not frappe.db.exists("Module Def", "Intelligence8"):
+        frappe.rename_doc("Module Def", "Intelligence", "Intelligence8", force=True)
 
     # ── Workspace (name MUST = Module Def name) ──
-    if frappe.db.exists("Workspace", "Intelligence"):
-        frappe.delete_doc("Workspace", "Intelligence", ignore_permissions=True)
+    if frappe.db.exists("Workspace", "Intelligence8"):
+        frappe.delete_doc("Workspace", "Intelligence8", ignore_permissions=True)
 
     ws = frappe.new_doc("Workspace")
-    ws.name = "Intelligence"
-    ws.label = "Intelligence"
+    ws.name = "Intelligence8"
+    ws.label = "Intelligence8"
     ws.title = "Intelligence8"
-    ws.module = "Intelligence"
+    ws.module = "Intelligence8"
     ws.icon = "setting"
     ws.public = 1
     ws.is_hidden = 0
@@ -438,19 +436,19 @@ def setup_workspace():
         frappe.logger().error(f"Error creating workspace: {e}")
 
     # ── Workspace Sidebar (Frappe 16 sidebar menu) ──
-    if frappe.db.exists("Workspace Sidebar", "Intelligence"):
-        frappe.delete_doc("Workspace Sidebar", "Intelligence", ignore_permissions=True)
+    if frappe.db.exists("Workspace Sidebar", "Intelligence8"):
+        frappe.delete_doc("Workspace Sidebar", "Intelligence8", ignore_permissions=True)
 
     sidebar = frappe.new_doc("Workspace Sidebar")
-    sidebar.name = "Intelligence"
+    sidebar.name = "Intelligence8"
     sidebar.title = "Intelligence8"
     sidebar.header_icon = "setting"
-    sidebar.module = "Intelligence"
+    sidebar.module = "Intelligence8"
     sidebar.app = "brazil_module"
     sidebar.standard = 1
 
     for item_data in [
-        {"label": "Home", "type": "Link", "link_to": "Intelligence", "link_type": "Workspace"},
+        {"label": "Home", "type": "Link", "link_to": "Intelligence8", "link_type": "Workspace"},
         {"label": "Agent Settings", "type": "Link", "link_to": "I8 Agent Settings", "link_type": "DocType"},
         {"label": "Conversations", "type": "Link", "link_to": "I8 Conversation", "link_type": "DocType"},
         {"label": "Decision Log", "type": "Link", "link_to": "I8 Decision Log", "link_type": "DocType"},
@@ -482,27 +480,24 @@ def setup_desktop_icons():
     """Configure Desktop Icons for the /desk page.
 
     In Frappe 16, the /desk page is driven by the 'Desktop Icon' DocType.
-    Each icon appears as a button on the main desk. We delete old Bancos/Fiscal
-    icons and create a single Intelligence icon.
+    Each icon appears as a button on the main desk. Desktop Icon.link_to
+    must reference an existing Workspace Sidebar name.
     """
-    # Delete old icons — everything is under Intelligence now
-    for old_name in ("Bancos", "Fiscal", "Intelligence8"):
-        if frappe.db.exists("Desktop Icon", old_name):
-            frappe.delete_doc("Desktop Icon", old_name, ignore_permissions=True)
-        # Also search by label in case name differs
+    # Delete old icons
+    for old_name in ("Bancos", "Fiscal", "Intelligence"):
         for match in frappe.get_all("Desktop Icon", filters={"label": old_name}, pluck="name"):
             frappe.delete_doc("Desktop Icon", match, ignore_permissions=True)
 
-    # Delete and recreate Intelligence icon to keep in sync
-    for match in frappe.get_all("Desktop Icon", filters={"label": "Intelligence"}, pluck="name"):
+    # Delete and recreate Intelligence8 icon
+    for match in frappe.get_all("Desktop Icon", filters={"label": "Intelligence8"}, pluck="name"):
         frappe.delete_doc("Desktop Icon", match, ignore_permissions=True)
 
     icon = frappe.new_doc("Desktop Icon")
-    icon.label = "Intelligence"
+    icon.label = "Intelligence8"
     icon.icon = "setting"
     icon.app = "brazil_module"
     icon.link_type = "Workspace Sidebar"
-    icon.link_to = "Intelligence"
+    icon.link_to = "Intelligence8"
     icon.icon_type = "Link"
     icon.standard = 1
     icon.hidden = 0
