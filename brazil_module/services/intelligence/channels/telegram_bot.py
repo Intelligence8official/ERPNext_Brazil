@@ -193,11 +193,20 @@ class TelegramBot:
     ) -> dict:
         """POST a sendMessage request to the Telegram Bot API."""
         url = f"{TELEGRAM_API.format(token=self._token)}/sendMessage"
-        payload: dict = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+        # Telegram max message length is 4096 chars
+        truncated = text[:4090] + "..." if len(text) > 4096 else text
+        payload: dict = {"chat_id": chat_id, "text": truncated, "parse_mode": "Markdown"}
         if reply_markup is not None:
             payload["reply_markup"] = json.dumps(reply_markup)
         resp = requests.post(url, json=payload, timeout=10)
-        return resp.json()
+        result = resp.json()
+        # Fallback: if Markdown fails, retry without parse_mode
+        if not result.get("ok"):
+            payload["parse_mode"] = ""
+            del payload["parse_mode"]
+            resp = requests.post(url, json=payload, timeout=10)
+            result = resp.json()
+        return result
 
     def send_approval_request(self, decision: dict) -> dict:
         """Format and send an approval request with an inline keyboard."""

@@ -272,10 +272,10 @@ class TestSendMessage(unittest.TestCase):
         self.assertEqual(payload["chat_id"], "chat-99")
         self.assertEqual(payload["text"], "Test message")
 
-    def test_payload_parse_mode_html(self):
+    def test_payload_parse_mode_markdown(self):
         self.bot.send_message("chat-1", "msg")
         payload = _requests_mock.post.call_args[1]["json"]
-        self.assertEqual(payload["parse_mode"], "HTML")
+        self.assertEqual(payload["parse_mode"], "Markdown")
 
     def test_reply_markup_serialized_to_json_string(self):
         markup = {"inline_keyboard": [[{"text": "A", "callback_data": "b"}]]}
