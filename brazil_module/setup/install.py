@@ -11,11 +11,13 @@ def after_install():
     """Post-installation setup."""
     create_custom_fields()
     create_roles()
+    setup_workspace()
 
 
 def after_migrate():
     """Run after bench migrate."""
     create_custom_fields()
+    setup_workspace()
 
 
 def create_custom_fields():
@@ -343,3 +345,70 @@ def create_roles():
             frappe.logger().error(f"Error creating role {role_name}: {str(e)}")
 
     frappe.db.commit()
+
+
+def setup_workspace():
+    """Ensure Intelligence8 workspace exists and is visible."""
+    if frappe.db.exists("Workspace", "Intelligence8"):
+        frappe.db.set_value("Workspace", "Intelligence8", {
+            "public": 1,
+            "is_hidden": 0,
+            "icon": "setting",
+            "module": "Intelligence",
+        })
+    else:
+        ws = frappe.new_doc("Workspace")
+        ws.name = "Intelligence8"
+        ws.label = "Intelligence8"
+        ws.title = "Intelligence8"
+        ws.module = "Intelligence"
+        ws.icon = "setting"
+        ws.public = 1
+        ws.is_hidden = 0
+        ws.sequence_id = 3
+
+        shortcuts = [
+            ("I8 Agent Settings", "", "Blue"),
+            ("I8 Conversation", "List", "Green"),
+            ("I8 Decision Log", "List", "Orange"),
+            ("I8 Recurring Expense", "List", "Green"),
+            ("I8 Supplier Profile", "List", "Blue"),
+            ("I8 Cost Log", "List", "Grey"),
+        ]
+        for label, doc_view, color in shortcuts:
+            ws.append("shortcuts", {
+                "label": label,
+                "link_to": label,
+                "type": "DocType",
+                "doc_view": doc_view,
+                "color": color,
+            })
+
+        links = [
+            ("Card Break", "Agent", ""),
+            ("Link", "Settings", "I8 Agent Settings"),
+            ("Link", "Conversations", "I8 Conversation"),
+            ("Link", "Module Registry", "I8 Module Registry"),
+            ("Card Break", "P2P (Procure-to-Pay)", ""),
+            ("Link", "Recurring Expenses", "I8 Recurring Expense"),
+            ("Link", "Supplier Profiles", "I8 Supplier Profile"),
+            ("Card Break", "Logs & Audit", ""),
+            ("Link", "Decision Log", "I8 Decision Log"),
+            ("Link", "Cost Log", "I8 Cost Log"),
+        ]
+        for link_type, label, link_to in links:
+            ws.append("links", {
+                "type": link_type,
+                "label": label,
+                "link_to": link_to,
+                "link_type": "DocType",
+            })
+
+        try:
+            ws.insert(ignore_permissions=True, ignore_if_duplicate=True)
+            frappe.logger().info("Created Intelligence8 workspace")
+        except Exception as e:
+            frappe.logger().error(f"Error creating workspace: {e}")
+
+    frappe.db.commit()
+    frappe.clear_cache()
