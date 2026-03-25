@@ -12,11 +12,14 @@ def after_install():
     create_custom_fields()
     create_roles()
     setup_workspace()
+    setup_desktop_icons()
 
 
 def after_migrate():
     """Run after bench migrate."""
     create_custom_fields()
+    setup_workspace()
+    setup_desktop_icons()
     setup_workspace()
 
 
@@ -473,3 +476,49 @@ def setup_workspace():
 
     frappe.db.commit()
     frappe.clear_cache()
+
+
+def setup_desktop_icons():
+    """Configure Desktop Icons for the /desk page.
+
+    In Frappe 16, the /desk page is driven by the 'Desktop Icon' DocType.
+    Each icon appears as a button on the main desk. We create one for
+    Intelligence and hide the old Bancos/Fiscal icons.
+    """
+    # Hide old icons
+    for old_name in ("Bancos", "Fiscal"):
+        if frappe.db.exists("Desktop Icon", old_name):
+            frappe.db.set_value("Desktop Icon", old_name, "hidden", 1)
+        elif frappe.db.exists("Desktop Icon", {"label": old_name}):
+            name = frappe.db.get_value("Desktop Icon", {"label": old_name}, "name")
+            frappe.db.set_value("Desktop Icon", name, "hidden", 1)
+
+    # Cleanup legacy name
+    for old_name in ("Intelligence8",):
+        if frappe.db.exists("Desktop Icon", old_name):
+            frappe.delete_doc("Desktop Icon", old_name, ignore_permissions=True)
+        if frappe.db.exists("Desktop Icon", {"label": old_name}):
+            name = frappe.db.get_value("Desktop Icon", {"label": old_name}, "name")
+            frappe.delete_doc("Desktop Icon", name, ignore_permissions=True)
+
+    # Create Intelligence icon if not exists
+    if not frappe.db.exists("Desktop Icon", {"label": "Intelligence"}):
+        icon = frappe.new_doc("Desktop Icon")
+        icon.label = "Intelligence"
+        icon.icon = "setting"
+        icon.app = "brazil_module"
+        icon.link_type = "Workspace Sidebar"
+        icon.link_to = "Intelligence"
+        icon.icon_type = "Link"
+        icon.standard = 1
+        icon.hidden = 0
+        try:
+            icon.insert(ignore_permissions=True)
+        except Exception as e:
+            frappe.logger().error(f"Error creating Desktop Icon: {e}")
+    else:
+        # Ensure it's visible
+        name = frappe.db.get_value("Desktop Icon", {"label": "Intelligence"}, "name")
+        frappe.db.set_value("Desktop Icon", name, {"hidden": 0, "app": "brazil_module", "standard": 1})
+
+    frappe.db.commit()
