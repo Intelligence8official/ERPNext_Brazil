@@ -106,16 +106,16 @@ class TelegramBot:
         )
 
         if approved:
+            # Execute the approved tool directly instead of re-running the agent
             frappe.enqueue(
-                "brazil_module.services.intelligence.agent.process_single_event",
+                "brazil_module.services.intelligence.channels.telegram_bot.execute_approved_action",
                 queue="long",
-                event_type="approved_action",
-                event_id=log_name,
-                event_data={"decision_log": log_name, "module": log.module},
+                timeout=120,
+                log_name=log_name,
             )
             self.send_message(
                 self._settings.telegram_chat_id,
-                f"Aprovado: {log.action} - {log.related_docname}",
+                f"Aprovado: {log.action}. Executando...",
             )
         else:
             self.send_message(
@@ -228,6 +228,56 @@ class TelegramBot:
             data = json.loads(log.input_summary or "{}")
             if "rate" in data and "qty" in data:
                 return float(data["rate"]) * float(data["qty"])
+            # Check items array for total
+            if "items" in data:
+                total = sum(float(it.get("rate", 0)) * float(it.get("qty", 1)) for it in data["items"])
+                if total > 0:
+                    return total
             return float(data.get("amount", 0))
         except (ValueError, TypeError, json.JSONDecodeError):
             return 0.0
+
+
+def execute_approved_action(log_name: str):
+    """Background job: execute a tool call that was approved by a human.
+
+    Reads the Decision Log to get the tool name and arguments, then
+    executes the tool directly via ActionExecutor.
+    """
+    from brazil_module.services.intelligence.action_executor import ActionExecutor
+    from brazil_module.services.intelligence.tools import execute_tool
+
+    log = frappe.get_doc("I8 Decision Log", log_name)
+    tool_name = log.action
+    tool_args = json.loads(log.input_summary or "{}")
+
+    executor = ActionExecutor()
+    try:
+        result = execute_tool(tool_name, tool_args, executor)
+        # Send success notification via Telegram
+        bot = TelegramBot()
+        doc_name = result.get("name", "") if isinstance(result, dict) else ""
+        bot.send_message(
+            bot._settings.telegram_chat_id,
+            f"Executado: {tool_name}\nDocumento: {doc_name}",
+        )
+        # Log to conversation
+        from brazil_module.services.intelligence.channels.channel_router import ChannelRouter
+        router = ChannelRouter()
+        router.route_message(
+            channel="system", direction="outgoing", actor="agent",
+            content=f"Executed approved action: {tool_name} -> {doc_name}",
+            related_doctype=result.get("doctype") if isinstance(result, dict) else None,
+            related_docname=doc_name,
+        )
+        frappe.db.commit()
+    except Exception as e:
+        frappe.log_error(str(e), f"I8 Approved Action Error: {tool_name}")
+        try:
+            bot = TelegramBot()
+            bot.send_message(
+                bot._settings.telegram_chat_id,
+                f"Erro ao executar {tool_name}: {str(e)[:200]}",
+            )
+        except Exception:
+            pass

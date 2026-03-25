@@ -205,7 +205,7 @@ class TestHandleCallback(unittest.TestCase):
         self.bot._handle_callback(callback)
         self.mock_log.resolve.assert_not_called()
 
-    def test_approve_enqueues_agent_event(self):
+    def test_approve_enqueues_execution(self):
         callback = {
             "from": {"id": 555},
             "data": "approve:DL-001",
@@ -213,8 +213,7 @@ class TestHandleCallback(unittest.TestCase):
         self.bot._handle_callback(callback)
         frappe.enqueue.assert_called_once()
         eq_kwargs = frappe.enqueue.call_args[1]
-        self.assertEqual(eq_kwargs["event_type"], "approved_action")
-        self.assertEqual(eq_kwargs["event_id"], "DL-001")
+        self.assertEqual(eq_kwargs["log_name"], "DL-001")
 
     def test_callback_without_log_name_ignored(self):
         callback = {
