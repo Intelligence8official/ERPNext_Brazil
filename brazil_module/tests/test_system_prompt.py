@@ -23,9 +23,9 @@ class TestBuildSystemPrompt(unittest.TestCase):
         result = build_system_prompt(self._make_settings(), ["p2p"])
         self.assertIsInstance(result, str)
 
-    def test_includes_confidence_threshold(self):
-        result = build_system_prompt(self._make_settings(threshold=0.90), ["p2p"])
-        self.assertIn("0.9", result)
+    def test_includes_tool_call_instruction(self):
+        result = build_system_prompt(self._make_settings(), ["p2p"])
+        self.assertIn("ALWAYS CALL TOOLS", result)
 
     def test_includes_active_modules(self):
         result = build_system_prompt(self._make_settings(), ["p2p", "fiscal", "banking"])
