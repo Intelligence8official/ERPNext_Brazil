@@ -1,0 +1,60 @@
+{
+    "actions": [],
+    "allow_rename": 0,
+    "creation": "2026-03-25 10:00:00.000000",
+    "doctype": "DocType",
+    "editable_grid": 1,
+    "engine": "InnoDB",
+    "field_order": [
+        "telegram_user_id",
+        "user",
+        "approval_limit",
+        "active"
+    ],
+    "fields": [
+        {
+            "fieldname": "telegram_user_id",
+            "fieldtype": "Data",
+            "label": "Telegram User ID",
+            "reqd": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "user",
+            "fieldtype": "Link",
+            "label": "User",
+            "options": "User",
+            "reqd": 1,
+            "in_list_view": 1
+        },
+        {
+            "default": "0",
+            "fieldname": "approval_limit",
+            "fieldtype": "Currency",
+            "label": "Approval Limit",
+            "in_list_view": 1,
+            "description": "Max value this user can approve. 0 = unlimited."
+        },
+        {
+            "default": "1",
+            "fieldname": "active",
+            "fieldtype": "Check",
+            "label": "Active",
+            "in_list_view": 1
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "istable": 1,
+    "links": [],
+    "modified": "2026-03-25 10:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Intelligence",
+    "name": "I8 Telegram User",
+    "naming_rule": "Random",
+    "owner": "Administrator",
+    "permissions": [],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "track_changes": 0
+}

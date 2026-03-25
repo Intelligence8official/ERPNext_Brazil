@@ -1,0 +1,157 @@
+{
+    "actions": [],
+    "allow_rename": 0,
+    "creation": "2026-03-25 10:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "timestamp",
+        "event_type",
+        "module",
+        "action",
+        "actor",
+        "channel",
+        "confidence_score",
+        "model_used",
+        "input_summary",
+        "reasoning",
+        "result",
+        "related_doctype",
+        "related_docname",
+        "cost_usd",
+        "human_override",
+        "human_feedback"
+    ],
+    "fields": [
+        {
+            "fieldname": "timestamp",
+            "fieldtype": "Datetime",
+            "label": "Timestamp",
+            "reqd": 1
+        },
+        {
+            "fieldname": "event_type",
+            "fieldtype": "Data",
+            "label": "Event Type"
+        },
+        {
+            "fieldname": "module",
+            "fieldtype": "Data",
+            "label": "Module"
+        },
+        {
+            "fieldname": "action",
+            "fieldtype": "Data",
+            "label": "Action"
+        },
+        {
+            "fieldname": "actor",
+            "fieldtype": "Select",
+            "label": "Actor",
+            "options": "Agent\nHuman"
+        },
+        {
+            "fieldname": "channel",
+            "fieldtype": "Select",
+            "label": "Channel",
+            "options": "telegram\nerp_chat\nsystem\nemail"
+        },
+        {
+            "fieldname": "confidence_score",
+            "fieldtype": "Float",
+            "label": "Confidence Score"
+        },
+        {
+            "fieldname": "model_used",
+            "fieldtype": "Data",
+            "label": "Model Used"
+        },
+        {
+            "fieldname": "input_summary",
+            "fieldtype": "Long Text",
+            "label": "Input Summary"
+        },
+        {
+            "fieldname": "reasoning",
+            "fieldtype": "Long Text",
+            "label": "Reasoning"
+        },
+        {
+            "fieldname": "result",
+            "fieldtype": "Select",
+            "label": "Result",
+            "options": "Success\nFailed\nRejected\nPending",
+            "in_list_view": 1,
+            "in_standard_filter": 1
+        },
+        {
+            "fieldname": "related_doctype",
+            "fieldtype": "Link",
+            "label": "Related DocType",
+            "options": "DocType"
+        },
+        {
+            "fieldname": "related_docname",
+            "fieldtype": "Dynamic Link",
+            "label": "Related Document",
+            "options": "related_doctype"
+        },
+        {
+            "fieldname": "cost_usd",
+            "fieldtype": "Currency",
+            "label": "Cost (USD)"
+        },
+        {
+            "default": "0",
+            "fieldname": "human_override",
+            "fieldtype": "Check",
+            "label": "Human Override"
+        },
+        {
+            "fieldname": "human_feedback",
+            "fieldtype": "Small Text",
+            "label": "Human Feedback"
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "is_submittable": 1,
+    "links": [],
+    "modified": "2026-03-25 10:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Intelligence",
+    "name": "I8 Decision Log",
+    "naming_rule": "Random",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "System Manager",
+            "share": 1,
+            "submit": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "Intelligence8 Admin",
+            "share": 1,
+            "submit": 1,
+            "write": 1
+        },
+        {
+            "read": 1,
+            "role": "Intelligence8 Viewer"
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "track_changes": 1
+}

@@ -1,0 +1,95 @@
+{
+    "actions": [],
+    "allow_rename": 0,
+    "creation": "2026-03-25 10:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "module_name",
+        "description",
+        "tools_definition",
+        "context_prompt",
+        "enabled",
+        "default_model"
+    ],
+    "fields": [
+        {
+            "fieldname": "module_name",
+            "fieldtype": "Data",
+            "label": "Module Name",
+            "reqd": 1,
+            "in_list_view": 1,
+            "unique": 1
+        },
+        {
+            "fieldname": "description",
+            "fieldtype": "Small Text",
+            "label": "Description"
+        },
+        {
+            "fieldname": "tools_definition",
+            "fieldtype": "Code",
+            "label": "Tools Definition",
+            "options": "JSON"
+        },
+        {
+            "fieldname": "context_prompt",
+            "fieldtype": "Code",
+            "label": "Context Prompt",
+            "options": "text"
+        },
+        {
+            "default": "1",
+            "fieldname": "enabled",
+            "fieldtype": "Check",
+            "label": "Enabled",
+            "in_list_view": 1
+        },
+        {
+            "default": "sonnet",
+            "fieldname": "default_model",
+            "fieldtype": "Select",
+            "label": "Default Model",
+            "options": "haiku\nsonnet\nopus",
+            "in_list_view": 1
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "links": [],
+    "modified": "2026-03-25 10:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Intelligence",
+    "name": "I8 Module Registry",
+    "naming_rule": "Random",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "Intelligence8 Admin",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "read": 1,
+            "role": "Intelligence8 Viewer"
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "track_changes": 0
+}

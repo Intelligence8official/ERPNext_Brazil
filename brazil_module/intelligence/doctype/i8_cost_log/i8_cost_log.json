@@ -1,0 +1,130 @@
+{
+    "actions": [],
+    "allow_rename": 0,
+    "creation": "2026-03-25 10:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "timestamp",
+        "module",
+        "function_name",
+        "model",
+        "tokens_in",
+        "tokens_out",
+        "cost_usd",
+        "latency_ms",
+        "cache_hit",
+        "decision_log",
+        "company",
+        "department"
+    ],
+    "fields": [
+        {
+            "fieldname": "timestamp",
+            "fieldtype": "Datetime",
+            "label": "Timestamp",
+            "reqd": 1
+        },
+        {
+            "fieldname": "module",
+            "fieldtype": "Data",
+            "label": "Module",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "function_name",
+            "fieldtype": "Data",
+            "label": "Function Name",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "model",
+            "fieldtype": "Data",
+            "label": "Model",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "tokens_in",
+            "fieldtype": "Int",
+            "label": "Tokens In"
+        },
+        {
+            "fieldname": "tokens_out",
+            "fieldtype": "Int",
+            "label": "Tokens Out"
+        },
+        {
+            "fieldname": "cost_usd",
+            "fieldtype": "Currency",
+            "label": "Cost (USD)",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "latency_ms",
+            "fieldtype": "Int",
+            "label": "Latency (ms)"
+        },
+        {
+            "default": "0",
+            "fieldname": "cache_hit",
+            "fieldtype": "Check",
+            "label": "Cache Hit"
+        },
+        {
+            "fieldname": "decision_log",
+            "fieldtype": "Link",
+            "label": "Decision Log",
+            "options": "I8 Decision Log"
+        },
+        {
+            "fieldname": "company",
+            "fieldtype": "Link",
+            "label": "Company",
+            "options": "Company"
+        },
+        {
+            "fieldname": "department",
+            "fieldtype": "Link",
+            "label": "Department",
+            "options": "Department"
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "links": [],
+    "modified": "2026-03-25 10:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Intelligence",
+    "name": "I8 Cost Log",
+    "naming_rule": "Random",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "Intelligence8 Admin",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "read": 1,
+            "role": "Intelligence8 Viewer"
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "track_changes": 0
+}

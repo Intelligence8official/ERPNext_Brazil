@@ -1,0 +1,203 @@
+{
+    "actions": [],
+    "allow_rename": 0,
+    "creation": "2026-03-25 10:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "title",
+        "supplier",
+        "document_type",
+        "estimated_amount",
+        "currency",
+        "frequency",
+        "day_of_month",
+        "lead_days",
+        "notify_supplier",
+        "follow_up_after_days",
+        "max_follow_ups",
+        "auto_pay",
+        "payment_method",
+        "amount_tolerance_percent",
+        "confidence_threshold",
+        "cost_center",
+        "department",
+        "active",
+        "items",
+        "last_created",
+        "next_due"
+    ],
+    "fields": [
+        {
+            "fieldname": "title",
+            "fieldtype": "Data",
+            "label": "Title",
+            "reqd": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "supplier",
+            "fieldtype": "Link",
+            "label": "Supplier",
+            "options": "Supplier",
+            "reqd": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "document_type",
+            "fieldtype": "Select",
+            "label": "Document Type",
+            "options": "Purchase Order\nJournal Entry",
+            "reqd": 1
+        },
+        {
+            "fieldname": "estimated_amount",
+            "fieldtype": "Currency",
+            "label": "Estimated Amount",
+            "reqd": 1
+        },
+        {
+            "default": "BRL",
+            "fieldname": "currency",
+            "fieldtype": "Link",
+            "label": "Currency",
+            "options": "Currency"
+        },
+        {
+            "default": "Monthly",
+            "fieldname": "frequency",
+            "fieldtype": "Select",
+            "label": "Frequency",
+            "options": "Monthly\nWeekly\nQuarterly\nYearly",
+            "in_list_view": 1
+        },
+        {
+            "default": "1",
+            "fieldname": "day_of_month",
+            "fieldtype": "Int",
+            "label": "Day of Month"
+        },
+        {
+            "default": "10",
+            "fieldname": "lead_days",
+            "fieldtype": "Int",
+            "label": "Lead Days"
+        },
+        {
+            "default": "0",
+            "fieldname": "notify_supplier",
+            "fieldtype": "Check",
+            "label": "Notify Supplier"
+        },
+        {
+            "default": "7",
+            "fieldname": "follow_up_after_days",
+            "fieldtype": "Int",
+            "label": "Follow Up After (days)"
+        },
+        {
+            "default": "3",
+            "fieldname": "max_follow_ups",
+            "fieldtype": "Int",
+            "label": "Max Follow Ups"
+        },
+        {
+            "default": "0",
+            "fieldname": "auto_pay",
+            "fieldtype": "Check",
+            "label": "Auto Pay"
+        },
+        {
+            "fieldname": "payment_method",
+            "fieldtype": "Select",
+            "label": "Payment Method",
+            "options": "PIX\nTED\nBoleto"
+        },
+        {
+            "default": "5",
+            "fieldname": "amount_tolerance_percent",
+            "fieldtype": "Float",
+            "label": "Amount Tolerance (%)"
+        },
+        {
+            "fieldname": "confidence_threshold",
+            "fieldtype": "Float",
+            "label": "Confidence Threshold"
+        },
+        {
+            "fieldname": "cost_center",
+            "fieldtype": "Link",
+            "label": "Cost Center",
+            "options": "Cost Center"
+        },
+        {
+            "fieldname": "department",
+            "fieldtype": "Link",
+            "label": "Department",
+            "options": "Department"
+        },
+        {
+            "default": "1",
+            "fieldname": "active",
+            "fieldtype": "Check",
+            "label": "Active",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "items",
+            "fieldtype": "Table",
+            "label": "Items",
+            "options": "I8 Recurring Expense Item"
+        },
+        {
+            "fieldname": "last_created",
+            "fieldtype": "Date",
+            "label": "Last Created",
+            "read_only": 1
+        },
+        {
+            "fieldname": "next_due",
+            "fieldtype": "Date",
+            "label": "Next Due",
+            "read_only": 1
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "links": [],
+    "modified": "2026-03-25 10:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Intelligence",
+    "name": "I8 Recurring Expense",
+    "naming_rule": "Random",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "Intelligence8 Admin",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "read": 1,
+            "role": "Intelligence8 Viewer"
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "track_changes": 0
+}

@@ -1,0 +1,135 @@
+{
+    "actions": [],
+    "allow_rename": 0,
+    "creation": "2026-03-25 10:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "supplier",
+        "contact_email",
+        "communication_channel",
+        "email_template",
+        "expected_nf_days",
+        "follow_up_after_days",
+        "max_follow_ups",
+        "follow_up_interval_days",
+        "auto_pay",
+        "payment_method",
+        "notes",
+        "reliability_score"
+    ],
+    "fields": [
+        {
+            "fieldname": "supplier",
+            "fieldtype": "Link",
+            "label": "Supplier",
+            "options": "Supplier",
+            "reqd": 1,
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "contact_email",
+            "fieldtype": "Data",
+            "label": "Contact Email",
+            "options": "Email"
+        },
+        {
+            "default": "email",
+            "fieldname": "communication_channel",
+            "fieldtype": "Select",
+            "label": "Communication Channel",
+            "options": "email"
+        },
+        {
+            "fieldname": "email_template",
+            "fieldtype": "Link",
+            "label": "Email Template",
+            "options": "Email Template"
+        },
+        {
+            "default": "5",
+            "fieldname": "expected_nf_days",
+            "fieldtype": "Int",
+            "label": "Expected NF Days"
+        },
+        {
+            "default": "7",
+            "fieldname": "follow_up_after_days",
+            "fieldtype": "Int",
+            "label": "Follow Up After (days)"
+        },
+        {
+            "default": "3",
+            "fieldname": "max_follow_ups",
+            "fieldtype": "Int",
+            "label": "Max Follow Ups"
+        },
+        {
+            "default": "3",
+            "fieldname": "follow_up_interval_days",
+            "fieldtype": "Int",
+            "label": "Follow Up Interval (days)"
+        },
+        {
+            "default": "0",
+            "fieldname": "auto_pay",
+            "fieldtype": "Check",
+            "label": "Auto Pay"
+        },
+        {
+            "fieldname": "payment_method",
+            "fieldtype": "Select",
+            "label": "Payment Method",
+            "options": "PIX\nTED\nBoleto"
+        },
+        {
+            "fieldname": "notes",
+            "fieldtype": "Long Text",
+            "label": "Notes"
+        },
+        {
+            "fieldname": "reliability_score",
+            "fieldtype": "Float",
+            "label": "Reliability Score",
+            "read_only": 1
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "links": [],
+    "modified": "2026-03-25 10:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Intelligence",
+    "name": "I8 Supplier Profile",
+    "naming_rule": "Random",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "Intelligence8 Admin",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "read": 1,
+            "role": "Intelligence8 Viewer"
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "track_changes": 0
+}

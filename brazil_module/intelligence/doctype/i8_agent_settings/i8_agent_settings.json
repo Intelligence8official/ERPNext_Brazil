@@ -1,0 +1,304 @@
+{
+    "actions": [],
+    "allow_rename": 0,
+    "creation": "2026-03-25 10:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "general_section",
+        "enabled",
+        "default_confidence_threshold",
+        "column_break_general",
+        "high_value_confirmation_pin",
+        "high_value_threshold",
+        "ai_models_section",
+        "anthropic_api_key",
+        "enable_prompt_caching",
+        "max_requests_per_minute",
+        "column_break_ai_models",
+        "haiku_model",
+        "sonnet_model",
+        "opus_model",
+        "timeouts_section",
+        "haiku_timeout_seconds",
+        "sonnet_timeout_seconds",
+        "opus_timeout_seconds",
+        "telegram_section",
+        "telegram_bot_token",
+        "telegram_webhook_secret",
+        "column_break_telegram",
+        "telegram_chat_id",
+        "telegram_users",
+        "budget_section",
+        "daily_budget_usd",
+        "monthly_budget_usd",
+        "column_break_budget",
+        "pause_on_budget_exceeded",
+        "cost_anomaly_threshold",
+        "operator_hourly_cost",
+        "daily_briefing_section",
+        "briefing_enabled",
+        "briefing_time",
+        "graceful_degradation_section",
+        "circuit_breaker_threshold",
+        "circuit_breaker_recovery_seconds"
+    ],
+    "fields": [
+        {
+            "fieldname": "general_section",
+            "fieldtype": "Section Break",
+            "label": "General"
+        },
+        {
+            "default": "0",
+            "fieldname": "enabled",
+            "fieldtype": "Check",
+            "label": "Enabled"
+        },
+        {
+            "default": "0.85",
+            "fieldname": "default_confidence_threshold",
+            "fieldtype": "Float",
+            "label": "Default Confidence Threshold",
+            "description": "Decisions below this threshold require human approval (0.0-1.0)"
+        },
+        {
+            "fieldname": "column_break_general",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "0",
+            "fieldname": "high_value_confirmation_pin",
+            "fieldtype": "Check",
+            "label": "High Value Confirmation PIN"
+        },
+        {
+            "default": "10000",
+            "depends_on": "high_value_confirmation_pin",
+            "fieldname": "high_value_threshold",
+            "fieldtype": "Currency",
+            "label": "High Value Threshold"
+        },
+        {
+            "fieldname": "ai_models_section",
+            "fieldtype": "Section Break",
+            "label": "AI Models"
+        },
+        {
+            "fieldname": "anthropic_api_key",
+            "fieldtype": "Password",
+            "label": "Anthropic API Key",
+            "description": "Fallback. Prefer environment variable ANTHROPIC_API_KEY."
+        },
+        {
+            "default": "1",
+            "fieldname": "enable_prompt_caching",
+            "fieldtype": "Check",
+            "label": "Enable Prompt Caching"
+        },
+        {
+            "default": "60",
+            "fieldname": "max_requests_per_minute",
+            "fieldtype": "Int",
+            "label": "Max Requests Per Minute"
+        },
+        {
+            "fieldname": "column_break_ai_models",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "claude-haiku-4-5-20251001",
+            "fieldname": "haiku_model",
+            "fieldtype": "Data",
+            "label": "Haiku Model"
+        },
+        {
+            "default": "claude-sonnet-4-6",
+            "fieldname": "sonnet_model",
+            "fieldtype": "Data",
+            "label": "Sonnet Model"
+        },
+        {
+            "default": "claude-opus-4-6",
+            "fieldname": "opus_model",
+            "fieldtype": "Data",
+            "label": "Opus Model"
+        },
+        {
+            "collapsible": 1,
+            "fieldname": "timeouts_section",
+            "fieldtype": "Section Break",
+            "label": "Timeouts"
+        },
+        {
+            "default": "30",
+            "fieldname": "haiku_timeout_seconds",
+            "fieldtype": "Int",
+            "label": "Haiku Timeout (seconds)"
+        },
+        {
+            "default": "60",
+            "fieldname": "sonnet_timeout_seconds",
+            "fieldtype": "Int",
+            "label": "Sonnet Timeout (seconds)"
+        },
+        {
+            "default": "120",
+            "fieldname": "opus_timeout_seconds",
+            "fieldtype": "Int",
+            "label": "Opus Timeout (seconds)"
+        },
+        {
+            "fieldname": "telegram_section",
+            "fieldtype": "Section Break",
+            "label": "Telegram"
+        },
+        {
+            "fieldname": "telegram_bot_token",
+            "fieldtype": "Password",
+            "label": "Telegram Bot Token",
+            "description": "Fallback. Prefer environment variable I8_TELEGRAM_BOT_TOKEN."
+        },
+        {
+            "fieldname": "telegram_webhook_secret",
+            "fieldtype": "Password",
+            "label": "Telegram Webhook Secret",
+            "description": "Set when registering webhook. Validates X-Telegram-Bot-Api-Secret-Token header."
+        },
+        {
+            "fieldname": "column_break_telegram",
+            "fieldtype": "Column Break"
+        },
+        {
+            "fieldname": "telegram_chat_id",
+            "fieldtype": "Data",
+            "label": "Telegram Chat ID",
+            "description": "Telegram chat ID for notifications"
+        },
+        {
+            "fieldname": "telegram_users",
+            "fieldtype": "Table",
+            "label": "Telegram Users",
+            "options": "I8 Telegram User"
+        },
+        {
+            "fieldname": "budget_section",
+            "fieldtype": "Section Break",
+            "label": "Budget & Alerts"
+        },
+        {
+            "default": "10",
+            "fieldname": "daily_budget_usd",
+            "fieldtype": "Currency",
+            "label": "Daily Budget (USD)"
+        },
+        {
+            "default": "200",
+            "fieldname": "monthly_budget_usd",
+            "fieldtype": "Currency",
+            "label": "Monthly Budget (USD)"
+        },
+        {
+            "fieldname": "column_break_budget",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "0",
+            "fieldname": "pause_on_budget_exceeded",
+            "fieldtype": "Check",
+            "label": "Pause on Budget Exceeded"
+        },
+        {
+            "default": "2.0",
+            "fieldname": "cost_anomaly_threshold",
+            "fieldtype": "Float",
+            "label": "Cost Anomaly Threshold",
+            "description": "Alert if daily cost exceeds this multiple of the average"
+        },
+        {
+            "default": "50",
+            "fieldname": "operator_hourly_cost",
+            "fieldtype": "Currency",
+            "label": "Operator Hourly Cost",
+            "description": "Used to calculate estimated savings vs human operator"
+        },
+        {
+            "collapsible": 1,
+            "fieldname": "daily_briefing_section",
+            "fieldtype": "Section Break",
+            "label": "Daily Briefing"
+        },
+        {
+            "default": "0",
+            "fieldname": "briefing_enabled",
+            "fieldtype": "Check",
+            "label": "Briefing Enabled"
+        },
+        {
+            "default": "08:00:00",
+            "depends_on": "briefing_enabled",
+            "fieldname": "briefing_time",
+            "fieldtype": "Time",
+            "label": "Briefing Time"
+        },
+        {
+            "collapsible": 1,
+            "fieldname": "graceful_degradation_section",
+            "fieldtype": "Section Break",
+            "label": "Graceful Degradation"
+        },
+        {
+            "default": "5",
+            "fieldname": "circuit_breaker_threshold",
+            "fieldtype": "Int",
+            "label": "Circuit Breaker Threshold",
+            "description": "Consecutive API failures before pausing"
+        },
+        {
+            "default": "300",
+            "fieldname": "circuit_breaker_recovery_seconds",
+            "fieldtype": "Int",
+            "label": "Circuit Breaker Recovery (seconds)",
+            "description": "Seconds to wait before retrying after circuit opens"
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "issingle": 1,
+    "links": [],
+    "modified": "2026-03-25 10:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Intelligence",
+    "name": "I8 Agent Settings",
+    "naming_rule": "Expression (old style)",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "Intelligence8 Admin",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "read": 1,
+            "role": "Intelligence8 Viewer"
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "track_changes": 1
+}

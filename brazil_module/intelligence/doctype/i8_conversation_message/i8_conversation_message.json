@@ -1,0 +1,83 @@
+{
+    "actions": [],
+    "allow_rename": 0,
+    "creation": "2026-03-25 10:00:00.000000",
+    "doctype": "DocType",
+    "editable_grid": 1,
+    "engine": "InnoDB",
+    "field_order": [
+        "channel",
+        "direction",
+        "actor",
+        "content",
+        "timestamp",
+        "related_doctype",
+        "related_docname",
+        "telegram_message_id"
+    ],
+    "fields": [
+        {
+            "fieldname": "channel",
+            "fieldtype": "Select",
+            "label": "Channel",
+            "options": "telegram\nerp_chat\nemail\nsystem",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "direction",
+            "fieldtype": "Select",
+            "label": "Direction",
+            "options": "incoming\noutgoing\ninternal",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "actor",
+            "fieldtype": "Select",
+            "label": "Actor",
+            "options": "agent\nhuman",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "content",
+            "fieldtype": "Long Text",
+            "label": "Content"
+        },
+        {
+            "fieldname": "timestamp",
+            "fieldtype": "Datetime",
+            "label": "Timestamp",
+            "in_list_view": 1
+        },
+        {
+            "fieldname": "related_doctype",
+            "fieldtype": "Link",
+            "label": "Related DocType",
+            "options": "DocType"
+        },
+        {
+            "fieldname": "related_docname",
+            "fieldtype": "Dynamic Link",
+            "label": "Related Document",
+            "options": "related_doctype"
+        },
+        {
+            "fieldname": "telegram_message_id",
+            "fieldtype": "Data",
+            "label": "Telegram Message ID"
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "istable": 1,
+    "links": [],
+    "modified": "2026-03-25 10:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Intelligence",
+    "name": "I8 Conversation Message",
+    "naming_rule": "Random",
+    "owner": "Administrator",
+    "permissions": [],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "track_changes": 0
+}
