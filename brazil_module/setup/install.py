@@ -452,24 +452,46 @@ def setup_workspace():
     sidebar.app = "brazil_module"
     sidebar.standard = 1
 
-    for item_data in [
-        {"label": "Home", "type": "Link", "link_to": "Intelligence8", "link_type": "Workspace"},
-        {"label": "Agent Settings", "type": "Link", "link_to": "I8 Agent Settings", "link_type": "DocType"},
-        {"label": "Conversations", "type": "Link", "link_to": "I8 Conversation", "link_type": "DocType"},
-        {"label": "Decision Log", "type": "Link", "link_to": "I8 Decision Log", "link_type": "DocType"},
-        {"label": "Cost Log", "type": "Link", "link_to": "I8 Cost Log", "link_type": "DocType"},
-        {"label": "Recurring Expenses", "type": "Link", "link_to": "I8 Recurring Expense", "link_type": "DocType"},
-        {"label": "Supplier Profiles", "type": "Link", "link_to": "I8 Supplier Profile", "link_type": "DocType"},
-        {"label": "Nota Fiscal", "type": "Link", "link_to": "Nota Fiscal", "link_type": "DocType"},
-        {"label": "NF Settings", "type": "Link", "link_to": "Nota Fiscal Settings", "link_type": "DocType"},
-        {"label": "NF Company Settings", "type": "Link", "link_to": "NF Company Settings", "link_type": "DocType"},
-        {"label": "Import Logs", "type": "Link", "link_to": "NF Import Log", "link_type": "DocType"},
-        {"label": "Inter Settings", "type": "Link", "link_to": "Banco Inter Settings", "link_type": "DocType"},
-        {"label": "Company Accounts", "type": "Link", "link_to": "Inter Company Account", "link_type": "DocType"},
-        {"label": "Boletos", "type": "Link", "link_to": "Inter Boleto", "link_type": "DocType"},
-        {"label": "PIX Charges", "type": "Link", "link_to": "Inter PIX Charge", "link_type": "DocType"},
-        {"label": "Payment Orders", "type": "Link", "link_to": "Inter Payment Order", "link_type": "DocType"},
-    ]:
+    # Sidebar items: top-level links + collapsible sections with children
+    # type="Section Break" + indent=1 + collapsible=1 creates a collapsible group
+    # child=1 + collapsible=1 makes items appear inside the group
+    sidebar_items = [
+        # ── Top-level links ──
+        {"label": "Home", "type": "Link", "link_to": "Intelligence8", "link_type": "Workspace", "collapsible": 1},
+        {"label": "Conversations", "type": "Link", "link_to": "I8 Conversation", "link_type": "DocType", "collapsible": 1},
+        # ── P2P (Procure-to-Pay) ──
+        {"label": "P2P", "type": "Section Break", "link_type": "DocType", "collapsible": 1, "indent": 1},
+        {"label": "Recurring Expenses", "type": "Link", "link_to": "I8 Recurring Expense", "link_type": "DocType", "collapsible": 1, "child": 1},
+        {"label": "Supplier Profiles", "type": "Link", "link_to": "I8 Supplier Profile", "link_type": "DocType", "collapsible": 1, "child": 1},
+        {"label": "Purchase Order", "type": "Link", "link_to": "Purchase Order", "link_type": "DocType", "collapsible": 1, "child": 1},
+        {"label": "Purchase Invoice", "type": "Link", "link_to": "Purchase Invoice", "link_type": "DocType", "collapsible": 1, "child": 1},
+        # ── Fiscal ──
+        {"label": "Fiscal", "type": "Section Break", "link_type": "DocType", "collapsible": 1, "indent": 1},
+        {"label": "Nota Fiscal", "type": "Link", "link_to": "Nota Fiscal", "link_type": "DocType", "collapsible": 1, "child": 1},
+        {"label": "NF Company Settings", "type": "Link", "link_to": "NF Company Settings", "link_type": "DocType", "collapsible": 1, "child": 1},
+        {"label": "Nota Fiscal Settings", "type": "Link", "link_to": "Nota Fiscal Settings", "link_type": "DocType", "collapsible": 1, "child": 1},
+        {"label": "Import Logs", "type": "Link", "link_to": "NF Import Log", "link_type": "DocType", "collapsible": 1, "child": 1},
+        # ── Banco Inter ──
+        {"label": "Banco Inter", "type": "Section Break", "link_type": "DocType", "collapsible": 1, "indent": 1},
+        {"label": "Boletos", "type": "Link", "link_to": "Inter Boleto", "link_type": "DocType", "collapsible": 1, "child": 1},
+        {"label": "PIX Charges", "type": "Link", "link_to": "Inter PIX Charge", "link_type": "DocType", "collapsible": 1, "child": 1},
+        {"label": "Payment Orders", "type": "Link", "link_to": "Inter Payment Order", "link_type": "DocType", "collapsible": 1, "child": 1},
+        {"label": "Company Accounts", "type": "Link", "link_to": "Inter Company Account", "link_type": "DocType", "collapsible": 1, "child": 1},
+        {"label": "Inter Settings", "type": "Link", "link_to": "Banco Inter Settings", "link_type": "DocType", "collapsible": 1, "child": 1},
+        # ── Agent & Logs ──
+        {"label": "Agent", "type": "Section Break", "link_type": "DocType", "collapsible": 1, "indent": 1},
+        {"label": "Agent Settings", "type": "Link", "link_to": "I8 Agent Settings", "link_type": "DocType", "collapsible": 1, "child": 1},
+        {"label": "Module Registry", "type": "Link", "link_to": "I8 Module Registry", "link_type": "DocType", "collapsible": 1, "child": 1},
+        {"label": "Decision Log", "type": "Link", "link_to": "I8 Decision Log", "link_type": "DocType", "collapsible": 1, "child": 1},
+        {"label": "Cost Log", "type": "Link", "link_to": "I8 Cost Log", "link_type": "DocType", "collapsible": 1, "child": 1},
+        # ── Banking Logs ──
+        {"label": "Banking Logs", "type": "Section Break", "link_type": "DocType", "collapsible": 1, "indent": 1},
+        {"label": "API Log", "type": "Link", "link_to": "Inter API Log", "link_type": "DocType", "collapsible": 1, "child": 1},
+        {"label": "Sync Log", "type": "Link", "link_to": "Inter Sync Log", "link_type": "DocType", "collapsible": 1, "child": 1},
+        {"label": "Webhook Log", "type": "Link", "link_to": "Inter Webhook Log", "link_type": "DocType", "collapsible": 1, "child": 1},
+    ]
+
+    for item_data in sidebar_items:
         sidebar.append("items", item_data)
 
     try:
