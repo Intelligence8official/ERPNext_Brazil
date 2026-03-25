@@ -6,6 +6,9 @@ app_email = "contact@intelligence8.com"
 app_license = "MIT"
 required_apps = ["frappe", "erpnext"]
 
+# Global JS included in every desk page
+app_include_js = "/assets/brazil_module/js/i8_chat_widget.js"
+
 # DocType JS overrides
 doctype_js = {
     "Nota Fiscal": "fiscal/doctype/nota_fiscal/nota_fiscal.js",
