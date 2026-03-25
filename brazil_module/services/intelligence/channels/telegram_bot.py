@@ -21,7 +21,7 @@ TELEGRAM_API = "https://api.telegram.org/bot{token}"
 
 class TelegramBot:
     def __init__(self):
-        from brazil_module.intelligence.doctype.i8_agent_settings.i8_agent_settings import I8AgentSettings
+        from brazil_module.intelligence8.doctype.i8_agent_settings.i8_agent_settings import I8AgentSettings
         self._token = I8AgentSettings.get_telegram_token()
         self._settings = I8AgentSettings.get_settings()
         self._router = ChannelRouter()

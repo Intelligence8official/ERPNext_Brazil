@@ -23,7 +23,7 @@ frappe = sys.modules["frappe"]
 # Stub heavy transitive dependencies so the module can be imported without
 # a real Frappe installation.
 for _mod in [
-    "brazil_module.intelligence.doctype.i8_agent_settings.i8_agent_settings",
+    "brazil_module.intelligence8.doctype.i8_agent_settings.i8_agent_settings",
     "brazil_module.services.intelligence.channels.channel_router",
     "brazil_module.services.intelligence.prompts.approval_formatter",
     "brazil_module.services.intelligence.agent",
@@ -43,7 +43,7 @@ _tb_mod.requests = _requests_mock
 
 # Patch the heavy internal imports that happen inside __init__
 _MockI8AgentSettings = sys.modules[
-    "brazil_module.intelligence.doctype.i8_agent_settings.i8_agent_settings"
+    "brazil_module.intelligence8.doctype.i8_agent_settings.i8_agent_settings"
 ].I8AgentSettings
 _MockChannelRouter = sys.modules[
     "brazil_module.services.intelligence.channels.channel_router"
