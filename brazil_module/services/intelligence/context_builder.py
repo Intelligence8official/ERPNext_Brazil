@@ -20,6 +20,9 @@ class ContextBuilder:
         if "supplier" in event_data:
             context["supplier_profile"] = self._get_supplier_profile(event_data["supplier"])
 
+        if "recurring_expense" in event_data:
+            context["recurring_expense"] = self._get_recurring_expense(event_data["recurring_expense"])
+
         return context
 
     def _get_system_context(self) -> str:
@@ -63,6 +66,32 @@ class ContextBuilder:
             else m
             for m in recent
         ]
+
+    def _get_recurring_expense(self, expense_name: str) -> dict | None:
+        try:
+            doc = frappe.get_doc("I8 Recurring Expense", expense_name)
+            result = {
+                "name": doc.name,
+                "title": doc.title,
+                "supplier": doc.supplier,
+                "document_type": doc.document_type,
+                "estimated_amount": float(doc.estimated_amount or 0),
+                "currency": doc.currency,
+                "frequency": doc.frequency,
+                "day_of_month": doc.day_of_month,
+                "next_due": str(doc.next_due) if doc.next_due else None,
+                "notify_supplier": doc.notify_supplier,
+                "items": [],
+            }
+            for item in (doc.items or []):
+                result["items"].append({
+                    "item_code": item.item_code,
+                    "qty": float(item.qty or 0),
+                    "rate": float(item.rate or 0),
+                })
+            return result
+        except Exception:
+            return None
 
     def _get_supplier_profile(self, supplier: str) -> dict | None:
         profiles = frappe.get_all(

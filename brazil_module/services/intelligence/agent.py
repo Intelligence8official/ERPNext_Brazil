@@ -72,7 +72,7 @@ class Intelligence8Agent:
                 model=model,
                 max_tokens=4096,
                 system=system_prompt + "\n\n" + context.get("module_context", ""),
-                messages=[{"role": "user", "content": json.dumps(event_data, default=str, ensure_ascii=False)}],
+                messages=[{"role": "user", "content": self._build_user_message(event_type, event_data, context)}],
                 tools=tools,
             )
             _circuit_breaker.record_success()
@@ -141,6 +141,46 @@ class Intelligence8Agent:
             )
         except Exception as e:
             frappe.log_error(str(e), "I8 Conversation Log Error")
+
+    @staticmethod
+    def _build_user_message(event_type: str, event_data: dict, context: dict) -> str:
+        """Build a rich user message with all context for the LLM."""
+        parts = [f"EVENT: {event_type}\n"]
+
+        if event_type == "recurring_schedule" and context.get("recurring_expense"):
+            exp = context["recurring_expense"]
+            items_str = "\n".join(
+                f"  - {it['item_code']}: qty={it['qty']}, rate={it['rate']}"
+                for it in exp.get("items", [])
+            )
+            parts.append(
+                f"ACTION REQUIRED: Create a Purchase Order for this recurring expense.\n\n"
+                f"Recurring Expense: {exp['title']}\n"
+                f"Supplier: {exp['supplier']}\n"
+                f"Amount: {exp['currency']} {exp['estimated_amount']}\n"
+                f"Due Date: {exp['next_due']}\n"
+                f"Document Type: {exp['document_type']}\n"
+                f"Items:\n{items_str}\n"
+                f"Notify Supplier: {'Yes' if exp.get('notify_supplier') else 'No'}\n"
+            )
+        elif event_type == "human_message":
+            parts.append(f"User message: {event_data.get('text', '')}\n")
+        elif event_type == "classify_email":
+            parts.append(
+                f"ACTION REQUIRED: Classify this email.\n\n"
+                f"Subject: {event_data.get('subject', '')}\n"
+                f"Sender: {event_data.get('sender', '')}\n"
+                f"Content: {(event_data.get('content') or '')[:500]}\n"
+            )
+        else:
+            parts.append(json.dumps(event_data, default=str, ensure_ascii=False))
+
+        if context.get("supplier_profile"):
+            sp = context["supplier_profile"]
+            parts.append(f"\nSupplier Profile: expected_nf_days={sp.get('expected_nf_days')}, auto_pay={sp.get('auto_pay')}")
+
+        parts.append(f"\nToday: {context.get('system_context', '')}")
+        return "\n".join(parts)
 
     @staticmethod
     def _extract_confidence(response) -> float:
