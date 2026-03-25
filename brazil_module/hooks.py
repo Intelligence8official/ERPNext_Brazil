@@ -51,8 +51,8 @@ doc_events = {
 # Scheduled Tasks
 scheduler_events = {
     "cron": {
-        # Fiscal: Every 10 minutes - fetch documents from SEFAZ
-        "*/10 * * * *": [
+        # Fiscal: Every hour - fetch documents from SEFAZ
+        "0 * * * *": [
             "brazil_module.services.fiscal.dfe_client.scheduled_fetch"
         ],
         # Fiscal: Every 5 minutes - check emails for NF attachments

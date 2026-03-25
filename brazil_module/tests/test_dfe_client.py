@@ -15,7 +15,8 @@ frappe_mock.utils.get_datetime = MagicMock(side_effect=lambda x: x)
 sys.modules.setdefault("frappe", frappe_mock)
 sys.modules.setdefault("frappe.utils", frappe_mock.utils)
 
-# Mock cert_utils
+# Mock requests and cert_utils
+sys.modules.setdefault("requests", MagicMock())
 cert_mock = MagicMock()
 sys.modules.setdefault("brazil_module.services.fiscal.cert_utils", cert_mock)
 

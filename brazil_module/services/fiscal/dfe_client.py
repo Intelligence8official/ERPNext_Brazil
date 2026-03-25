@@ -7,6 +7,7 @@ Adapted from NFSe_WebMonitor/nfse_client.py.
 
 import gzip
 import base64
+import time
 import requests
 from datetime import datetime, timedelta
 
@@ -16,6 +17,12 @@ from frappe.utils import now_datetime, get_datetime
 
 # SEFAZ rate limit: must wait 1 hour when no new documents
 SEFAZ_WAIT_HOURS = 1
+
+# HTTP 429 retry settings
+MAX_RETRIES = 3
+INITIAL_BACKOFF_SECONDS = 30  # 30s, 60s, 120s
+MAX_BACKOFF_SECONDS = 300
+DEFAULT_429_BLOCK_MINUTES = 60
 
 from brazil_module.services.fiscal.cert_utils import CertificateContext
 from brazil_module.services.fiscal.xml_parser import NFXMLParser
@@ -41,6 +48,18 @@ def _check_rate_limit(company_settings, document_type):
     if not field:
         return True, 0, ""
 
+    # Check HTTP 429 block first (applies to all document types)
+    fetch_blocked = getattr(company_settings, "fetch_blocked_until", None)
+    if fetch_blocked:
+        blocked_dt = get_datetime(fetch_blocked)
+        now = now_datetime()
+        if now < blocked_dt:
+            wait_minutes = int((blocked_dt - now).total_seconds() / 60)
+            return False, wait_minutes, _(
+                "SEFAZ blocked (HTTP 429): must wait {0} more minutes. "
+                "Blocked until {1}."
+            ).format(wait_minutes, blocked_dt.strftime("%H:%M:%S"))
+
     last_empty = getattr(company_settings, field, None)
     if not last_empty:
         return True, 0, ""
@@ -57,6 +76,80 @@ def _check_rate_limit(company_settings, document_type):
         ).format(wait_minutes, last_empty_dt.strftime("%H:%M:%S"))
 
     return True, 0, ""
+
+
+def _handle_429_response(response, company_settings):
+    """
+    Handle HTTP 429 (Too Many Requests) by blocking future fetches.
+
+    Reads Retry-After header if present, otherwise blocks for DEFAULT_429_BLOCK_MINUTES.
+    """
+    retry_after = response.headers.get("Retry-After")
+    if retry_after:
+        try:
+            block_seconds = int(retry_after)
+        except ValueError:
+            block_seconds = DEFAULT_429_BLOCK_MINUTES * 60
+    else:
+        block_seconds = DEFAULT_429_BLOCK_MINUTES * 60
+
+    block_until = now_datetime() + timedelta(seconds=block_seconds)
+    block_minutes = block_seconds // 60
+
+    frappe.db.set_value(
+        "NF Company Settings",
+        company_settings.name,
+        "fetch_blocked_until",
+        block_until,
+        update_modified=False,
+    )
+    frappe.logger().warning(
+        f"SEFAZ HTTP 429: Rate limited. Blocking fetches for {block_minutes} minutes "
+        f"until {block_until.strftime('%H:%M:%S')}."
+    )
+
+    return {
+        "status": "rate_limited",
+        "fetched": 0,
+        "created": 0,
+        "skipped": 0,
+        "message": _(
+            "SEFAZ rate limit (HTTP 429): Too many requests. "
+            "Fetching blocked for {0} minutes."
+        ).format(block_minutes),
+    }
+
+
+def _request_with_retry(session, method, url, max_retries=MAX_RETRIES, **kwargs):
+    """
+    Make HTTP request with retry on 429 using exponential backoff.
+
+    Returns the response object. Raises on non-429 HTTP errors.
+    """
+    for attempt in range(max_retries + 1):
+        if method == "get":
+            response = session.get(url, **kwargs)
+        else:
+            response = session.post(url, **kwargs)
+
+        if response.status_code != 429:
+            return response
+
+        if attempt < max_retries:
+            wait = min(INITIAL_BACKOFF_SECONDS * (2 ** attempt), MAX_BACKOFF_SECONDS)
+            retry_after = response.headers.get("Retry-After")
+            if retry_after:
+                try:
+                    wait = min(int(retry_after), MAX_BACKOFF_SECONDS)
+                except ValueError:
+                    pass
+            frappe.logger().warning(
+                f"HTTP 429: Retry {attempt + 1}/{max_retries} after {wait}s"
+            )
+            time.sleep(wait)
+
+    # All retries exhausted, return the 429 response
+    return response
 
 
 def _update_rate_limit(company_settings, document_type, had_documents):
@@ -282,7 +375,7 @@ def _fetch_nfse_documents(endpoint, cert_path, key_path, last_nsu, company_setti
     })
 
     try:
-        response = session.get(url, timeout=60)
+        response = _request_with_retry(session, "get", url, timeout=60)
     except requests.exceptions.SSLError as e:
         frappe.logger().error(f"NFS-e Fetch: SSL/Certificate error: {e}")
         return {
@@ -310,6 +403,10 @@ def _fetch_nfse_documents(endpoint, cert_path, key_path, last_nsu, company_setti
     frappe.logger().info(f"NFS-e Fetch: HTTP Status={response.status_code}")
     frappe.logger().info(f"NFS-e Fetch: Response={response.text[:1000] if response.text else 'empty'}")
 
+    # Handle 429: rate limited after retries exhausted
+    if response.status_code == 429:
+        return _handle_429_response(response, company_settings)
+
     # Handle 404: NSU may have expired on SEFAZ side. Retry with NSU=0.
     if response.status_code == 404 and str(last_nsu) != "0":
         frappe.logger().warning(
@@ -317,21 +414,21 @@ def _fetch_nfse_documents(endpoint, cert_path, key_path, last_nsu, company_setti
             f"NSU may have expired. Retrying with NSU=0..."
         )
         url = f"{endpoint}/0"
-        response = session.get(url, timeout=60)
+        response = _request_with_retry(session, "get", url, timeout=60)
 
         frappe.logger().info(f"NFS-e Fetch (retry): HTTP Status={response.status_code}")
         frappe.logger().info(f"NFS-e Fetch (retry): Response={response.text[:1000] if response.text else 'empty'}")
 
+        if response.status_code == 429:
+            return _handle_429_response(response, company_settings)
+
         if response.ok:
-            # Reset worked - the old NSU was stale
             frappe.logger().info(
                 f"NFS-e Fetch: NSU reset successful. Old NSU={last_nsu} was stale."
             )
-            # Reset the stored NSU since the old one was invalid
             company_settings.update_last_nsu("NFS-e", "0")
 
     if response.status_code == 404:
-        # API endpoint itself might have changed or certificate issue
         frappe.logger().error(
             f"NFS-e Fetch: API returning 404. URL: {url}. "
             f"This may indicate: (1) certificate/mTLS issue, "
@@ -515,7 +612,7 @@ def _fetch_dfe_documents(endpoint, cert_path, key_path, last_nsu, document_type,
     }
 
     try:
-        response = session.post(endpoint, data=soap_envelope, headers=headers, timeout=60)
+        response = _request_with_retry(session, "post", endpoint, data=soap_envelope, headers=headers, timeout=60)
     except requests.exceptions.SSLError as e:
         frappe.logger().error(f"{document_type} SOAP Fetch: SSL error: {e}")
         return {
@@ -534,6 +631,10 @@ def _fetch_dfe_documents(endpoint, cert_path, key_path, last_nsu, document_type,
         }
 
     frappe.logger().info(f"{document_type} SOAP Fetch: HTTP status={response.status_code}")
+
+    # Handle 429: rate limited after retries exhausted
+    if response.status_code == 429:
+        return _handle_429_response(response, company_settings)
 
     response.raise_for_status()
 
