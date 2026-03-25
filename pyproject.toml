@@ -30,3 +30,9 @@ pythonpath = ["."]
 [tool.bench.frappe-dependencies]
 frappe = ">=15.0.0"
 erpnext = ">=15.0.0"
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+ignore = ["E402"]  # Module level import not at top: required for frappe mock pattern in tests

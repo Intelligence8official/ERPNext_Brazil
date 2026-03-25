@@ -1,5 +1,5 @@
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 if "frappe" not in sys.modules or not isinstance(sys.modules["frappe"], MagicMock):
     _fm = MagicMock()
@@ -13,7 +13,7 @@ sys.modules.setdefault("anthropic", MagicMock())
 frappe = sys.modules["frappe"]
 
 # Mock the service dependencies so we can import agent
-for dep in [
+_agent_mock_deps = [
     "brazil_module.services.intelligence.circuit_breaker",
     "brazil_module.services.intelligence.cost_tracker",
     "brazil_module.services.intelligence.decision_engine",
@@ -21,19 +21,25 @@ for dep in [
     "brazil_module.services.intelligence.context_builder",
     "brazil_module.services.intelligence.tools",
     "brazil_module.services.intelligence.prompts.system_prompt",
-]:
-    sys.modules.setdefault(dep, MagicMock())
+]
+_agent_saved = {}
+for _dep in _agent_mock_deps:
+    if _dep in sys.modules:
+        _agent_saved[_dep] = sys.modules[_dep]
+    sys.modules[_dep] = MagicMock()
 
 import unittest
 
 import brazil_module.services.intelligence.agent as _agent_mod
 
-# Now patch the module-level imports
-from brazil_module.services.intelligence.circuit_breaker import CircuitBreaker
-from brazil_module.services.intelligence.cost_tracker import CostTracker
-from brazil_module.services.intelligence.decision_engine import DecisionEngine
-from brazil_module.services.intelligence.action_executor import ActionExecutor
-from brazil_module.services.intelligence.context_builder import ContextBuilder
+# Restore mocked deps so other test files can import the real modules
+for _dep, _orig in _agent_saved.items():
+    sys.modules[_dep] = _orig
+for _dep in _agent_mock_deps:
+    if _dep not in _agent_saved and _dep in sys.modules:
+        del sys.modules[_dep]
+
+# Re-import after cleanup so names are bound to the mocks that agent holds
 
 
 class TestAgentProcessEvent(unittest.TestCase):

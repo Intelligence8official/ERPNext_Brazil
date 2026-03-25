@@ -60,7 +60,7 @@ class TestAllowlist(unittest.TestCase):
         mock_doc.name = "PO-001"
         frappe.get_doc.return_value = mock_doc
         executor = ActionExecutor()
-        result = executor.execute("Purchase Order", "submit", {"name": "PO-001"})
+        executor.execute("Purchase Order", "submit", {"name": "PO-001"})
         mock_doc.submit.assert_called_once()
 
     def test_cancel_calls_doc_cancel(self):
@@ -68,7 +68,7 @@ class TestAllowlist(unittest.TestCase):
         mock_doc.name = "PO-001"
         frappe.get_doc.return_value = mock_doc
         executor = ActionExecutor()
-        result = executor.execute("Purchase Order", "cancel", {"name": "PO-001"})
+        executor.execute("Purchase Order", "cancel", {"name": "PO-001"})
         mock_doc.cancel.assert_called_once()
 
     def test_update_does_not_mutate_input(self):

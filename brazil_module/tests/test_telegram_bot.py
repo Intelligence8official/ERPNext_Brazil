@@ -6,7 +6,7 @@ Pattern: inject frappe mock into sys.modules BEFORE importing the module under t
 """
 import json
 import sys
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 # ---------------------------------------------------------------------------
 # Bootstrap frappe mock (must happen before any brazil_module import)

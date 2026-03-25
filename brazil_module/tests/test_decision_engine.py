@@ -1,5 +1,5 @@
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 if "frappe" not in sys.modules or not isinstance(sys.modules["frappe"], MagicMock):
     _fm = MagicMock()

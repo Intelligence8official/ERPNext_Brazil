@@ -12,7 +12,6 @@ frappe = sys.modules["frappe"]
 import unittest
 
 from brazil_module.services.intelligence.tools import get_all_tool_schemas, execute_tool
-from brazil_module.services.intelligence.tools.erp_tools import TOOL_SCHEMAS as ERP_SCHEMAS
 
 
 class TestToolRegistry(unittest.TestCase):
@@ -39,7 +38,7 @@ class TestErpTools(unittest.TestCase):
     def test_read_document(self):
         mock_executor = MagicMock()
         mock_executor.execute.return_value = {"name": "PO-001"}
-        result = execute_tool("erp.read_document", {"doctype": "Purchase Order", "name": "PO-001"}, mock_executor)
+        execute_tool("erp.read_document", {"doctype": "Purchase Order", "name": "PO-001"}, mock_executor)
         mock_executor.execute.assert_called_with("Purchase Order", "read", {"name": "PO-001"})
 
     def test_list_documents(self):
@@ -67,7 +66,7 @@ class TestPurchasingTools(unittest.TestCase):
     def test_create_purchase_order(self):
         mock_executor = MagicMock()
         mock_executor.execute.return_value = {"name": "PO-NEW", "doctype": "Purchase Order"}
-        result = execute_tool("p2p.create_purchase_order", {
+        execute_tool("p2p.create_purchase_order", {
             "supplier": "Test Sup",
             "required_by": "2026-04-05",
             "items": [{"item_code": "ITEM-001", "qty": 1, "rate": 100}],

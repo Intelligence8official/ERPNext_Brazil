@@ -1,6 +1,5 @@
 import calendar
 from datetime import date
-import frappe
 from frappe.model.document import Document
 
 

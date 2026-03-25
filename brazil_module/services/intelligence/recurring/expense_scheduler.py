@@ -54,7 +54,8 @@ def _is_due(expense: dict, today: date) -> bool:
 
 
 def calculate_next_due(frequency: str, day_of_month: int, after_date: date) -> date:
-    day = min(day_of_month, 28) if day_of_month else 1
+    if not day_of_month:
+        day_of_month = 1
     if frequency == "Monthly":
         month = after_date.month % 12 + 1
         year = after_date.year + (1 if month == 1 else 0)
