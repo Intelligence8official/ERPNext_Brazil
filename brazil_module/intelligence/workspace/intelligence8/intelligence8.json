@@ -1,13 +1,13 @@
 {
  "charts": [],
- "content": "[{\"id\":\"i8_header_1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Intelligence8</b></span>\",\"col\":12}},{\"id\":\"i8_shortcut_1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Agent Settings\",\"col\":4}},{\"id\":\"i8_shortcut_2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Conversation\",\"col\":4}},{\"id\":\"i8_shortcut_3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Decision Log\",\"col\":4}},{\"id\":\"i8_spacer_1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"i8_header_2\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h5\\\">Finance</span>\",\"col\":12}},{\"id\":\"i8_shortcut_4\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Cost Log\",\"col\":4}},{\"id\":\"i8_shortcut_5\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Recurring Expense\",\"col\":4}},{\"id\":\"i8_shortcut_6\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Supplier Profile\",\"col\":4}}]",
+ "content": "[{\"id\":\"i8_header_1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Intelligence8</b></span>\",\"col\":12}},{\"id\":\"i8_shortcut_1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Agent Settings\",\"col\":4}},{\"id\":\"i8_shortcut_2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Conversation\",\"col\":4}},{\"id\":\"i8_shortcut_3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Decision Log\",\"col\":4}},{\"id\":\"i8_spacer_1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"i8_header_2\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h5\\\">Finance</span>\",\"col\":12}},{\"id\":\"i8_shortcut_4\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Recurring Expense\",\"col\":4}},{\"id\":\"i8_shortcut_5\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Supplier Profile\",\"col\":4}},{\"id\":\"i8_shortcut_6\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Cost Log\",\"col\":4}}]",
  "creation": "2026-03-25 00:00:00.000000",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
  "for_user": "",
  "hide_custom": 0,
- "icon": "robot",
+ "icon": "setting",
  "idx": 0,
  "indicator_color": "blue",
  "is_hidden": 0,
@@ -26,7 +26,7 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "I8 Agent Settings",
+   "label": "Settings",
    "link_count": 0,
    "link_to": "I8 Agent Settings",
    "link_type": "DocType",
@@ -36,7 +36,7 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "I8 Conversation",
+   "label": "Conversations",
    "link_count": 0,
    "link_to": "I8 Conversation",
    "link_type": "DocType",
@@ -46,7 +46,17 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Logs",
+   "label": "Module Registry",
+   "link_count": 0,
+   "link_to": "I8 Module Registry",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "P2P (Procure-to-Pay)",
    "link_count": 0,
    "link_to": "",
    "link_type": "DocType",
@@ -56,7 +66,37 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "I8 Decision Log",
+   "label": "Recurring Expenses",
+   "link_count": 0,
+   "link_to": "I8 Recurring Expense",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Supplier Profiles",
+   "link_count": 0,
+   "link_to": "I8 Supplier Profile",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Logs & Audit",
+   "link_count": 0,
+   "link_to": "",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Decision Log",
    "link_count": 0,
    "link_to": "I8 Decision Log",
    "link_type": "DocType",
@@ -66,45 +106,15 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "I8 Cost Log",
+   "label": "Cost Log",
    "link_count": 0,
    "link_to": "I8 Cost Log",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Finance",
-   "link_count": 0,
-   "link_to": "",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "I8 Recurring Expense",
-   "link_count": 0,
-   "link_to": "I8 Recurring Expense",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "I8 Supplier Profile",
-   "link_count": 0,
-   "link_to": "I8 Supplier Profile",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
   }
  ],
- "modified": "2026-03-25 00:00:00.000000",
+ "modified": "2026-03-25 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Intelligence",
  "name": "Intelligence8",
@@ -124,17 +134,31 @@
    "type": "DocType"
   },
   {
-   "color": "Blue",
+   "color": "Green",
    "doc_view": "List",
    "label": "I8 Conversation",
    "link_to": "I8 Conversation",
    "type": "DocType"
   },
   {
-   "color": "Grey",
+   "color": "Orange",
    "doc_view": "List",
    "label": "I8 Decision Log",
    "link_to": "I8 Decision Log",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "doc_view": "List",
+   "label": "I8 Recurring Expense",
+   "link_to": "I8 Recurring Expense",
+   "type": "DocType"
+  },
+  {
+   "color": "Blue",
+   "doc_view": "List",
+   "label": "I8 Supplier Profile",
+   "link_to": "I8 Supplier Profile",
    "type": "DocType"
   },
   {
@@ -142,20 +166,6 @@
    "doc_view": "List",
    "label": "I8 Cost Log",
    "link_to": "I8 Cost Log",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "List",
-   "label": "I8 Recurring Expense",
-   "link_to": "I8 Recurring Expense",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "List",
-   "label": "I8 Supplier Profile",
-   "link_to": "I8 Supplier Profile",
    "type": "DocType"
   }
  ],

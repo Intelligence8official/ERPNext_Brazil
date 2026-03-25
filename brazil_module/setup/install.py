@@ -234,7 +234,24 @@ def create_custom_fields():
                 "insert_after": "i8_classification",
                 "read_only": 1,
             },
-        ]
+        ],
+        "Purchase Order": [
+            {
+                "fieldname": "i8_section",
+                "fieldtype": "Section Break",
+                "label": "Intelligence8",
+                "insert_after": "nota_fiscal",
+                "collapsible": 1,
+            },
+            {
+                "fieldname": "i8_recurring_expense",
+                "fieldtype": "Link",
+                "label": "Recurring Expense",
+                "options": "I8 Recurring Expense",
+                "insert_after": "i8_section",
+                "read_only": 1,
+            },
+        ],
     }
 
     _create_fields(fiscal_fields, module="Fiscal")

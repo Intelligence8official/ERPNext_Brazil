@@ -298,12 +298,7 @@
         }
     ],
     "index_web_pages_for_search": 0,
-    "links": [
-        {
-            "link_doctype": "Purchase Order",
-            "link_fieldname": "i8_recurring_expense"
-        }
-    ],
+    "links": [],
     "modified": "2026-03-25 16:00:00.000000",
     "modified_by": "Administrator",
     "module": "Intelligence",
