@@ -97,13 +97,50 @@ class Intelligence8Agent:
 
         confidence = self._extract_confidence(response)
 
+        # Collect text response and tool calls
+        text_response = ""
         results = []
         for block in response.content:
-            if block.type == "tool_use":
+            if block.type == "text":
+                text_response += block.text
+            elif block.type == "tool_use":
                 result = self._handle_tool_call(block, event_type, event_data, confidence)
                 results.append(result)
 
-        return {"status": "completed", "results": results}
+        # Send text response back to the user's channel
+        if text_response.strip():
+            self._send_response(event_data, text_response.strip())
+
+        return {"status": "completed", "results": results, "text": text_response}
+
+    def _send_response(self, event_data: dict, text: str) -> None:
+        """Send agent's text response back to the originating channel."""
+        chat_id = event_data.get("chat_id")
+        if chat_id:
+            # Came from Telegram — reply there
+            try:
+                from brazil_module.services.intelligence.channels.telegram_bot import TelegramBot
+                bot = TelegramBot()
+                # Strip confidence line from user-facing messages
+                clean = re.sub(r"\n?Confidence:\s*0\.\d+", "", text).strip()
+                if clean:
+                    bot.send_message(chat_id, clean)
+            except Exception as e:
+                frappe.log_error(str(e), "I8 Telegram Response Error")
+
+        # Always log to conversation
+        try:
+            from brazil_module.services.intelligence.channels.channel_router import ChannelRouter
+            router = ChannelRouter()
+            channel = "telegram" if chat_id else "system"
+            router.route_message(
+                channel=channel, direction="outgoing", actor="agent",
+                content=text,
+                related_doctype=event_data.get("related_doctype"),
+                related_docname=event_data.get("related_docname"),
+            )
+        except Exception as e:
+            frappe.log_error(str(e), "I8 Conversation Log Error")
 
     @staticmethod
     def _extract_confidence(response) -> float:
