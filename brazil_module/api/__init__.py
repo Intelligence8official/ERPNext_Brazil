@@ -705,7 +705,9 @@ def telegram_webhook():
     if not bot.validate_webhook(secret):
         frappe.throw("Unauthorized", frappe.AuthenticationError)
 
-    update = frappe.parse_json(frappe.request.data)
+    import json
+    raw = frappe.request.data
+    update = json.loads(raw if isinstance(raw, str) else raw.decode("utf-8"))
     bot.handle_update(update)
     return {"status": "ok"}
 
