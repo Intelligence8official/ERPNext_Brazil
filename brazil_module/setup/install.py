@@ -434,5 +434,65 @@ def setup_workspace():
     except Exception as e:
         frappe.logger().error(f"Error creating workspace: {e}")
 
+    # Frappe 16: Create Workspace Sidebar entry for the sidebar menu
+    _setup_workspace_sidebar()
+
     frappe.db.commit()
     frappe.clear_cache()
+
+
+def _setup_workspace_sidebar():
+    """Create or update the Workspace Sidebar entry for Intelligence8.
+
+    In Frappe 16, the sidebar menu is driven by the 'Workspace Sidebar' DocType,
+    not the Workspace DocType directly. Each sidebar entry has child items
+    (Workspace Sidebar Item) that define the menu links.
+    """
+    # Remove old Fiscal/Bancos sidebar entries
+    for old_name in ("Fiscal", "Bancos"):
+        if frappe.db.exists("Workspace Sidebar", old_name):
+            frappe.delete_doc("Workspace Sidebar", old_name, ignore_permissions=True)
+
+    # Recreate Intelligence8 sidebar
+    if frappe.db.exists("Workspace Sidebar", "Intelligence8"):
+        frappe.delete_doc("Workspace Sidebar", "Intelligence8", ignore_permissions=True)
+
+    sidebar = frappe.new_doc("Workspace Sidebar")
+    sidebar.name = "Intelligence8"
+    sidebar.title = "Intelligence8"
+    sidebar.header_icon = "setting"
+    sidebar.module = "Intelligence"
+    sidebar.standard = 0
+
+    sidebar_items = [
+        # Home
+        {"label": "Home", "type": "Link", "link_to": "Intelligence8", "link_type": "Workspace"},
+        # Agent
+        {"label": "Agent Settings", "type": "Link", "link_to": "I8 Agent Settings", "link_type": "DocType"},
+        {"label": "Conversations", "type": "Link", "link_to": "I8 Conversation", "link_type": "DocType"},
+        {"label": "Decision Log", "type": "Link", "link_to": "I8 Decision Log", "link_type": "DocType"},
+        {"label": "Cost Log", "type": "Link", "link_to": "I8 Cost Log", "link_type": "DocType"},
+        # P2P
+        {"label": "Recurring Expenses", "type": "Link", "link_to": "I8 Recurring Expense", "link_type": "DocType"},
+        {"label": "Supplier Profiles", "type": "Link", "link_to": "I8 Supplier Profile", "link_type": "DocType"},
+        # Fiscal
+        {"label": "Nota Fiscal", "type": "Link", "link_to": "Nota Fiscal", "link_type": "DocType"},
+        {"label": "NF Settings", "type": "Link", "link_to": "Nota Fiscal Settings", "link_type": "DocType"},
+        {"label": "NF Company Settings", "type": "Link", "link_to": "NF Company Settings", "link_type": "DocType"},
+        {"label": "Import Logs", "type": "Link", "link_to": "NF Import Log", "link_type": "DocType"},
+        # Banking
+        {"label": "Inter Settings", "type": "Link", "link_to": "Banco Inter Settings", "link_type": "DocType"},
+        {"label": "Company Accounts", "type": "Link", "link_to": "Inter Company Account", "link_type": "DocType"},
+        {"label": "Boletos", "type": "Link", "link_to": "Inter Boleto", "link_type": "DocType"},
+        {"label": "PIX Charges", "type": "Link", "link_to": "Inter PIX Charge", "link_type": "DocType"},
+        {"label": "Payment Orders", "type": "Link", "link_to": "Inter Payment Order", "link_type": "DocType"},
+    ]
+
+    for item_data in sidebar_items:
+        sidebar.append("items", item_data)
+
+    try:
+        sidebar.insert(ignore_permissions=True)
+        frappe.logger().info("Created Intelligence8 Workspace Sidebar with %d items", len(sidebar_items))
+    except Exception as e:
+        frappe.logger().error(f"Error creating Workspace Sidebar: {e}")
