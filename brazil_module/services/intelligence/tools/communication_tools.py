@@ -2,7 +2,7 @@ import frappe
 
 TOOL_SCHEMAS = [
     {
-        "name": "comm.send_email",
+        "name": "comm-send_email",
         "description": "Send an email to a recipient",
         "input_schema": {
             "type": "object",
@@ -17,7 +17,7 @@ TOOL_SCHEMAS = [
         },
     },
     {
-        "name": "comm.send_notification",
+        "name": "comm-send_notification",
         "description": "Send a Frappe notification to a user",
         "input_schema": {
             "type": "object",
@@ -34,7 +34,7 @@ TOOL_SCHEMAS = [
 
 
 def execute_tool(tool_name: str, args: dict, executor) -> dict:
-    if tool_name == "comm.send_email":
+    if tool_name == "comm-send_email":
         frappe.sendmail(
             recipients=args["recipients"],
             subject=args["subject"],
@@ -43,7 +43,7 @@ def execute_tool(tool_name: str, args: dict, executor) -> dict:
             reference_name=args.get("reference_name"),
         )
         return {"status": "sent", "recipients": args["recipients"]}
-    elif tool_name == "comm.send_notification":
+    elif tool_name == "comm-send_notification":
         doc = frappe.new_doc("Notification Log")
         doc.for_user = args["user"]
         doc.subject = args["message"]

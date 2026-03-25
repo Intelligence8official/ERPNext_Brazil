@@ -2,7 +2,7 @@ import frappe
 
 TOOL_SCHEMAS = [
     {
-        "name": "erp.read_document",
+        "name": "erp-read_document",
         "description": "Read a document from ERPNext by doctype and name",
         "input_schema": {
             "type": "object",
@@ -14,7 +14,7 @@ TOOL_SCHEMAS = [
         },
     },
     {
-        "name": "erp.list_documents",
+        "name": "erp-list_documents",
         "description": "List documents from ERPNext with optional filters",
         "input_schema": {
             "type": "object",
@@ -31,9 +31,9 @@ TOOL_SCHEMAS = [
 
 
 def execute_tool(tool_name: str, args: dict, executor) -> dict:
-    if tool_name == "erp.read_document":
+    if tool_name == "erp-read_document":
         return executor.execute(args["doctype"], "read", {"name": args["name"]})
-    elif tool_name == "erp.list_documents":
+    elif tool_name == "erp-list_documents":
         return {
             "data": frappe.get_all(
                 args["doctype"],

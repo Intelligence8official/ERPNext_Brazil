@@ -2,7 +2,7 @@ import frappe
 
 TOOL_SCHEMAS = [
     {
-        "name": "email.classify",
+        "name": "email-classify",
         "description": "Classify an email into categories: FISCAL, COMMERCIAL, FINANCIAL, OPERATIONAL, SPAM, UNCERTAIN",
         "input_schema": {
             "type": "object",
@@ -15,7 +15,7 @@ TOOL_SCHEMAS = [
         },
     },
     {
-        "name": "email.search",
+        "name": "email-search",
         "description": "Search emails (Communication documents) with filters",
         "input_schema": {
             "type": "object",
@@ -27,7 +27,7 @@ TOOL_SCHEMAS = [
         },
     },
     {
-        "name": "email.get_content",
+        "name": "email-get_content",
         "description": "Get full content of an email by Communication name",
         "input_schema": {
             "type": "object",
@@ -41,10 +41,10 @@ TOOL_SCHEMAS = [
 
 
 def execute_tool(tool_name: str, args: dict, executor) -> dict:
-    if tool_name == "email.classify":
+    if tool_name == "email-classify":
         # Classification is done by the LLM itself — this tool just marks the result
         return {"status": "classified", "note": "Classification determined by agent reasoning"}
-    elif tool_name == "email.search":
+    elif tool_name == "email-search":
         filters = {"communication_type": "Communication", "sent_or_received": "Received"}
         if args.get("sender"):
             filters["sender"] = ["like", f"%{args['sender']}%"]
@@ -58,7 +58,7 @@ def execute_tool(tool_name: str, args: dict, executor) -> dict:
             order_by="communication_date desc",
         )
         return {"data": emails}
-    elif tool_name == "email.get_content":
+    elif tool_name == "email-get_content":
         doc = frappe.get_doc("Communication", args["communication"])
         return {
             "name": doc.name,

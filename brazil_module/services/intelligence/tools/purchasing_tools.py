@@ -2,7 +2,7 @@ import frappe
 
 TOOL_SCHEMAS = [
     {
-        "name": "p2p.create_purchase_order",
+        "name": "p2p-create_purchase_order",
         "description": "Create a Purchase Order in ERPNext",
         "input_schema": {
             "type": "object",
@@ -26,7 +26,7 @@ TOOL_SCHEMAS = [
         },
     },
     {
-        "name": "p2p.send_po_to_supplier",
+        "name": "p2p-send_po_to_supplier",
         "description": "Send email to supplier with PO details",
         "input_schema": {
             "type": "object",
@@ -38,7 +38,7 @@ TOOL_SCHEMAS = [
         },
     },
     {
-        "name": "p2p.list_due_invoices",
+        "name": "p2p-list_due_invoices",
         "description": "List Purchase Invoices due for payment within N days",
         "input_schema": {
             "type": "object",
@@ -51,7 +51,7 @@ TOOL_SCHEMAS = [
 
 
 def execute_tool(tool_name: str, args: dict, executor) -> dict:
-    if tool_name == "p2p.create_purchase_order":
+    if tool_name == "p2p-create_purchase_order":
         po_data = {
             "supplier": args["supplier"],
             "schedule_date": args["required_by"],
@@ -66,7 +66,7 @@ def execute_tool(tool_name: str, args: dict, executor) -> dict:
             ],
         }
         return executor.execute("Purchase Order", "create", po_data)
-    elif tool_name == "p2p.send_po_to_supplier":
+    elif tool_name == "p2p-send_po_to_supplier":
         po = frappe.get_doc("Purchase Order", args["purchase_order"])
         supplier_profile = frappe.get_all(
             "I8 Supplier Profile",
@@ -84,7 +84,7 @@ def execute_tool(tool_name: str, args: dict, executor) -> dict:
             )
             return {"status": "sent", "recipient": supplier_profile[0]["contact_email"]}
         return {"status": "no_contact", "message": "No supplier profile or contact email found"}
-    elif tool_name == "p2p.list_due_invoices":
+    elif tool_name == "p2p-list_due_invoices":
         from datetime import date, timedelta
         days = args.get("days_ahead", 7)
         due_date = (date.today() + timedelta(days=days)).isoformat()

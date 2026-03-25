@@ -2,7 +2,7 @@ import frappe
 
 TOOL_SCHEMAS = [
     {
-        "name": "banking.create_payment",
+        "name": "banking-create_payment",
         "description": "Create a payment for a Purchase Invoice via Banco Inter",
         "input_schema": {
             "type": "object",
@@ -14,7 +14,7 @@ TOOL_SCHEMAS = [
         },
     },
     {
-        "name": "banking.get_balance",
+        "name": "banking-get_balance",
         "description": "Get current bank account balance",
         "input_schema": {
             "type": "object",
@@ -25,7 +25,7 @@ TOOL_SCHEMAS = [
         },
     },
     {
-        "name": "banking.reconcile_transactions",
+        "name": "banking-reconcile_transactions",
         "description": "Run auto-reconciliation on unmatched bank transactions",
         "input_schema": {
             "type": "object",
@@ -39,7 +39,7 @@ TOOL_SCHEMAS = [
 
 
 def execute_tool(tool_name: str, args: dict, executor) -> dict:
-    if tool_name == "banking.create_payment":
+    if tool_name == "banking-create_payment":
         pi = frappe.get_doc("Purchase Invoice", args["purchase_invoice"])
         payment_data = {
             "payment_type": "Pay",
@@ -50,13 +50,13 @@ def execute_tool(tool_name: str, args: dict, executor) -> dict:
             "reference_date": frappe.utils.today(),
         }
         return executor.execute("Payment Entry", "create", payment_data)
-    elif tool_name == "banking.get_balance":
+    elif tool_name == "banking-get_balance":
         balance = frappe.db.get_value(
             "Bank Account", args["bank_account"],
             ["account_name", "bank_balance"],
             as_dict=True,
         )
         return balance or {"error": "Bank account not found"}
-    elif tool_name == "banking.reconcile_transactions":
+    elif tool_name == "banking-reconcile_transactions":
         return executor.execute("Bank Transaction", "reconcile", {"bank_account": args["bank_account"]})
     raise ValueError(f"Unknown tool: {tool_name}")

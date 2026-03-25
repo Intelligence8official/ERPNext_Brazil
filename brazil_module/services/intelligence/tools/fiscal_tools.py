@@ -2,7 +2,7 @@ import frappe
 
 TOOL_SCHEMAS = [
     {
-        "name": "fiscal.link_nf_to_po",
+        "name": "fiscal-link_nf_to_po",
         "description": "Link a Nota Fiscal to a Purchase Order",
         "input_schema": {
             "type": "object",
@@ -14,7 +14,7 @@ TOOL_SCHEMAS = [
         },
     },
     {
-        "name": "fiscal.create_purchase_invoice",
+        "name": "fiscal-create_purchase_invoice",
         "description": "Create Purchase Invoice from a Nota Fiscal",
         "input_schema": {
             "type": "object",
@@ -25,7 +25,7 @@ TOOL_SCHEMAS = [
         },
     },
     {
-        "name": "fiscal.find_matching_pos",
+        "name": "fiscal-find_matching_pos",
         "description": "Find Purchase Orders that match a Nota Fiscal by supplier and amount",
         "input_schema": {
             "type": "object",
@@ -39,11 +39,11 @@ TOOL_SCHEMAS = [
 
 
 def execute_tool(tool_name: str, args: dict, executor) -> dict:
-    if tool_name == "fiscal.link_nf_to_po":
+    if tool_name == "fiscal-link_nf_to_po":
         frappe.db.set_value("Nota Fiscal", args["nota_fiscal"], "purchase_order", args["purchase_order"])
         frappe.db.set_value("Purchase Order", args["purchase_order"], "nota_fiscal", args["nota_fiscal"])
         return {"status": "linked", "nota_fiscal": args["nota_fiscal"], "purchase_order": args["purchase_order"]}
-    elif tool_name == "fiscal.create_purchase_invoice":
+    elif tool_name == "fiscal-create_purchase_invoice":
         nf = frappe.get_doc("Nota Fiscal", args["nota_fiscal"])
         pi_data = {
             "supplier": nf.get("supplier") or nf.get("cnpj_emitente"),
@@ -53,7 +53,7 @@ def execute_tool(tool_name: str, args: dict, executor) -> dict:
             "items": [{"item_code": "Services", "qty": 1, "rate": float(nf.get("valor_total") or 0)}],
         }
         return executor.execute("Purchase Invoice", "create", pi_data)
-    elif tool_name == "fiscal.find_matching_pos":
+    elif tool_name == "fiscal-find_matching_pos":
         nf = frappe.get_doc("Nota Fiscal", args["nota_fiscal"])
         cnpj = nf.get("cnpj_emitente", "")
         valor = float(nf.get("valor_total") or 0)

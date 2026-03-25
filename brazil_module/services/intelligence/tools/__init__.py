@@ -25,7 +25,7 @@ def get_all_tool_schemas() -> list:
 
 
 def execute_tool(tool_name: str, args: dict, executor) -> dict:
-    prefix = tool_name.split(".")[0]
+    prefix = tool_name.split("-")[0]
     module_map = {
         "erp": erp_tools,
         "p2p": purchasing_tools,
