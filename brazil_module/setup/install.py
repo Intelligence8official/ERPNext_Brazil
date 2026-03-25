@@ -348,67 +348,91 @@ def create_roles():
 
 
 def setup_workspace():
-    """Ensure Intelligence8 workspace exists and is visible."""
+    """Ensure Intelligence8 workspace exists and is visible.
+
+    Centralizes all Brazil module screens (Agent, Fiscal, Banking) in one workspace.
+    Hides the old Fiscal and Bancos workspaces to avoid duplication.
+    """
+    # Hide old workspaces — everything is under Intelligence8 now
+    for old_ws in ("Fiscal", "Bancos"):
+        if frappe.db.exists("Workspace", old_ws):
+            frappe.db.set_value("Workspace", old_ws, "is_hidden", 1)
+
+    # Delete and recreate to keep in sync with code
     if frappe.db.exists("Workspace", "Intelligence8"):
-        frappe.db.set_value("Workspace", "Intelligence8", {
-            "public": 1,
-            "is_hidden": 0,
-            "icon": "setting",
-            "module": "Intelligence",
+        frappe.delete_doc("Workspace", "Intelligence8", ignore_permissions=True)
+
+    ws = frappe.new_doc("Workspace")
+    ws.name = "Intelligence8"
+    ws.label = "Intelligence8"
+    ws.title = "Intelligence8"
+    ws.module = "Intelligence"
+    ws.icon = "setting"
+    ws.public = 1
+    ws.is_hidden = 0
+    ws.sequence_id = 3
+
+    shortcuts = [
+        ("I8 Agent Settings", "", "Blue"),
+        ("I8 Conversation", "List", "Green"),
+        ("I8 Recurring Expense", "List", "Green"),
+        ("Nota Fiscal", "List", "Orange"),
+        ("Inter Boleto", "List", "Blue"),
+        ("I8 Decision Log", "List", "Grey"),
+    ]
+    for label, doc_view, color in shortcuts:
+        ws.append("shortcuts", {
+            "label": label,
+            "link_to": label,
+            "type": "DocType",
+            "doc_view": doc_view,
+            "color": color,
         })
-    else:
-        ws = frappe.new_doc("Workspace")
-        ws.name = "Intelligence8"
-        ws.label = "Intelligence8"
-        ws.title = "Intelligence8"
-        ws.module = "Intelligence"
-        ws.icon = "setting"
-        ws.public = 1
-        ws.is_hidden = 0
-        ws.sequence_id = 3
 
-        shortcuts = [
-            ("I8 Agent Settings", "", "Blue"),
-            ("I8 Conversation", "List", "Green"),
-            ("I8 Decision Log", "List", "Orange"),
-            ("I8 Recurring Expense", "List", "Green"),
-            ("I8 Supplier Profile", "List", "Blue"),
-            ("I8 Cost Log", "List", "Grey"),
-        ]
-        for label, doc_view, color in shortcuts:
-            ws.append("shortcuts", {
-                "label": label,
-                "link_to": label,
-                "type": "DocType",
-                "doc_view": doc_view,
-                "color": color,
-            })
+    links = [
+        # Agent
+        ("Card Break", "Agent", ""),
+        ("Link", "Settings", "I8 Agent Settings"),
+        ("Link", "Conversations", "I8 Conversation"),
+        ("Link", "Module Registry", "I8 Module Registry"),
+        ("Link", "Decision Log", "I8 Decision Log"),
+        ("Link", "Cost Log", "I8 Cost Log"),
+        # P2P
+        ("Card Break", "P2P (Procure-to-Pay)", ""),
+        ("Link", "Recurring Expenses", "I8 Recurring Expense"),
+        ("Link", "Supplier Profiles", "I8 Supplier Profile"),
+        # Fiscal
+        ("Card Break", "Fiscal", ""),
+        ("Link", "Nota Fiscal", "Nota Fiscal"),
+        ("Link", "NF Settings", "Nota Fiscal Settings"),
+        ("Link", "NF Company Settings", "NF Company Settings"),
+        ("Link", "NF Import Log", "NF Import Log"),
+        # Banking
+        ("Card Break", "Banco Inter", ""),
+        ("Link", "Inter Settings", "Banco Inter Settings"),
+        ("Link", "Company Accounts", "Inter Company Account"),
+        ("Link", "Boletos", "Inter Boleto"),
+        ("Link", "PIX Charges", "Inter PIX Charge"),
+        ("Link", "Payment Orders", "Inter Payment Order"),
+        # Banking Logs
+        ("Card Break", "Banking Logs", ""),
+        ("Link", "API Log", "Inter API Log"),
+        ("Link", "Sync Log", "Inter Sync Log"),
+        ("Link", "Webhook Log", "Inter Webhook Log"),
+    ]
+    for link_type, label, link_to in links:
+        ws.append("links", {
+            "type": link_type,
+            "label": label,
+            "link_to": link_to,
+            "link_type": "DocType",
+        })
 
-        links = [
-            ("Card Break", "Agent", ""),
-            ("Link", "Settings", "I8 Agent Settings"),
-            ("Link", "Conversations", "I8 Conversation"),
-            ("Link", "Module Registry", "I8 Module Registry"),
-            ("Card Break", "P2P (Procure-to-Pay)", ""),
-            ("Link", "Recurring Expenses", "I8 Recurring Expense"),
-            ("Link", "Supplier Profiles", "I8 Supplier Profile"),
-            ("Card Break", "Logs & Audit", ""),
-            ("Link", "Decision Log", "I8 Decision Log"),
-            ("Link", "Cost Log", "I8 Cost Log"),
-        ]
-        for link_type, label, link_to in links:
-            ws.append("links", {
-                "type": link_type,
-                "label": label,
-                "link_to": link_to,
-                "link_type": "DocType",
-            })
-
-        try:
-            ws.insert(ignore_permissions=True, ignore_if_duplicate=True)
-            frappe.logger().info("Created Intelligence8 workspace")
-        except Exception as e:
-            frappe.logger().error(f"Error creating workspace: {e}")
+    try:
+        ws.insert(ignore_permissions=True, ignore_if_duplicate=True)
+        frappe.logger().info("Created Intelligence8 workspace")
+    except Exception as e:
+        frappe.logger().error(f"Error creating workspace: {e}")
 
     frappe.db.commit()
     frappe.clear_cache()
