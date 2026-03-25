@@ -201,8 +201,45 @@ def create_custom_fields():
         ],
     }
 
+    # Intelligence8 custom fields (module: Intelligence)
+    intelligence_fields = {
+        "Communication": [
+            {
+                "fieldname": "i8_section",
+                "fieldtype": "Section Break",
+                "label": "Intelligence8",
+                "insert_after": "nf_processed",
+                "collapsible": 1,
+            },
+            {
+                "fieldname": "i8_processed",
+                "fieldtype": "Check",
+                "label": "I8 Processed",
+                "insert_after": "i8_section",
+                "read_only": 1,
+            },
+            {
+                "fieldname": "i8_classification",
+                "fieldtype": "Select",
+                "label": "I8 Classification",
+                "options": "\nFISCAL\nCOMMERCIAL\nFINANCIAL\nOPERATIONAL\nSPAM\nUNCERTAIN",
+                "insert_after": "i8_processed",
+                "read_only": 1,
+            },
+            {
+                "fieldname": "i8_decision_log",
+                "fieldtype": "Link",
+                "label": "I8 Decision Log",
+                "options": "I8 Decision Log",
+                "insert_after": "i8_classification",
+                "read_only": 1,
+            },
+        ]
+    }
+
     _create_fields(fiscal_fields, module="Fiscal")
     _create_fields(banking_fields, module="Bancos")
+    _create_fields(intelligence_fields, module="Intelligence")
 
 
 def _create_fields(fields_dict, module):
@@ -239,6 +276,11 @@ def _create_fields(fields_dict, module):
 
 def create_roles():
     """Create custom roles for Brazil module."""
+    intelligence_roles = [
+        {"role_name": "Intelligence8 Admin", "desk_access": 1},
+        {"role_name": "Intelligence8 Viewer", "desk_access": 1},
+    ]
+
     roles = [
         {
             "role_name": "Brazil NF Manager",
@@ -261,6 +303,8 @@ def create_roles():
             "description": "Can view transactions and create billing, but cannot execute payments",
         },
     ]
+
+    roles.extend(intelligence_roles)
 
     for role_data in roles:
         role_name = role_data.pop("role_name")

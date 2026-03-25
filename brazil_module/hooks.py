@@ -25,11 +25,17 @@ after_migrate = "brazil_module.setup.install.after_migrate"
 # Document Events
 doc_events = {
     "Nota Fiscal": {
-        "after_insert": "brazil_module.services.fiscal.processor.process_new_nf",
-        "validate": "brazil_module.services.fiscal.processor.validate_nf"
+        "after_insert": [
+            "brazil_module.services.fiscal.processor.process_new_nf",
+            "brazil_module.services.intelligence.agent.on_nota_fiscal",
+        ],
+        "validate": "brazil_module.services.fiscal.processor.validate_nf",
     },
     "Communication": {
-        "after_insert": "brazil_module.services.fiscal.email_monitor.check_nf_attachment"
+        "after_insert": [
+            "brazil_module.services.fiscal.email_monitor.check_nf_attachment",
+            "brazil_module.services.intelligence.agent.on_communication",
+        ]
     },
     "Sales Invoice": {
         "on_submit": "brazil_module.services.banking.boleto_service.on_invoice_submit",
@@ -66,6 +72,10 @@ scheduler_events = {
         "0 * * * *": [
             "brazil_module.services.banking.payment_service.scheduled_payment_status_check"
         ],
+        # Intelligence8: Daily expense check at 07:00
+        "0 7 * * *": ["brazil_module.services.intelligence.recurring.expense_scheduler.daily_check"],
+        # Intelligence8: Follow-up check at 09:00
+        "0 9 * * *": ["brazil_module.services.intelligence.recurring.follow_up_manager.check_overdue"],
     },
     "daily": [
         "brazil_module.services.fiscal.processor.cleanup_old_logs",

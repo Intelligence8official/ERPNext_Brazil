@@ -689,3 +689,63 @@ def get_dashboard_data(company: str | None = None) -> dict:
         "pending_pix": pending_pix,
         "pending_payments": pending_payments,
     }
+
+
+# ============================================================
+# Intelligence8 API
+# ============================================================
+
+@frappe.whitelist(allow_guest=True, methods=["POST"])
+def telegram_webhook():
+    """Receive Telegram Bot webhook updates."""
+    from brazil_module.services.intelligence.channels.telegram_bot import TelegramBot
+
+    bot = TelegramBot()
+    secret = frappe.request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if not bot.validate_webhook(secret):
+        frappe.throw("Unauthorized", frappe.AuthenticationError)
+
+    update = frappe.parse_json(frappe.request.data)
+    bot.handle_update(update)
+    return {"status": "ok"}
+
+
+@frappe.whitelist()
+def i8_chat_send(message, conversation=None):
+    """Send a message to Intelligence8 via ERP Chat."""
+    from brazil_module.services.intelligence.channels.erp_chat import send_message
+
+    return send_message(frappe.session.user, message, conversation)
+
+
+@frappe.whitelist()
+def i8_chat_history(conversation):
+    """Get conversation history for ERP Chat widget."""
+    from brazil_module.services.intelligence.channels.erp_chat import get_conversation_history
+
+    return get_conversation_history(conversation)
+
+
+@frappe.whitelist()
+def i8_dashboard_data():
+    """Get Intelligence8 dashboard data."""
+    from brazil_module.services.intelligence.cost_tracker import CostTracker
+
+    tracker = CostTracker()
+    today = frappe.utils.today()
+
+    return {
+        "status": "success",
+        "data": {
+            "daily_cost": tracker.get_daily_total(),
+            "pending_approvals": frappe.db.count(
+                "I8 Decision Log", {"result": "Pending", "docstatus": 0}
+            ),
+            "decisions_today": frappe.db.count(
+                "I8 Decision Log", {"timestamp": [">=", today]}
+            ),
+            "agent_enabled": bool(
+                frappe.db.get_single_value("I8 Agent Settings", "enabled")
+            ),
+        },
+    }
