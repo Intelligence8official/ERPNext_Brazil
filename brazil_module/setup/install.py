@@ -348,23 +348,36 @@ def create_roles():
 
 
 def setup_workspace():
-    """Ensure Intelligence8 workspace exists and is visible.
+    """Ensure Intelligence8 workspace and sidebar exist.
 
-    Centralizes all Brazil module screens (Agent, Fiscal, Banking) in one workspace.
-    Hides the old Fiscal and Bancos workspaces to avoid duplication.
+    Frappe 16 requires:
+    - Workspace name MUST match Module Def name for desk visibility
+    - Workspace Sidebar (separate DocType) controls the sidebar menu
+    - Workspace Sidebar.app must be set for standard sidebars
+
+    Centralizes Agent, Fiscal, and Banking under one "Intelligence" module.
+    Hides old Fiscal and Bancos workspaces/sidebars.
     """
-    # Hide old workspaces — everything is under Intelligence8 now
-    for old_ws in ("Fiscal", "Bancos"):
-        if frappe.db.exists("Workspace", old_ws):
-            frappe.db.set_value("Workspace", old_ws, "is_hidden", 1)
+    # ── Cleanup old entries ──
+    for old_name in ("Fiscal", "Bancos"):
+        if frappe.db.exists("Workspace", old_name):
+            frappe.db.set_value("Workspace", old_name, "is_hidden", 1)
+        if frappe.db.exists("Workspace Sidebar", old_name):
+            frappe.delete_doc("Workspace Sidebar", old_name, ignore_permissions=True)
 
-    # Delete and recreate to keep in sync with code
+    # Cleanup legacy "Intelligence8" names (renamed to "Intelligence")
     if frappe.db.exists("Workspace", "Intelligence8"):
         frappe.delete_doc("Workspace", "Intelligence8", ignore_permissions=True)
+    if frappe.db.exists("Workspace Sidebar", "Intelligence8"):
+        frappe.delete_doc("Workspace Sidebar", "Intelligence8", ignore_permissions=True)
+
+    # ── Workspace (name MUST = Module Def name) ──
+    if frappe.db.exists("Workspace", "Intelligence"):
+        frappe.delete_doc("Workspace", "Intelligence", ignore_permissions=True)
 
     ws = frappe.new_doc("Workspace")
-    ws.name = "Intelligence8"
-    ws.label = "Intelligence8"
+    ws.name = "Intelligence"
+    ws.label = "Intelligence"
     ws.title = "Intelligence8"
     ws.module = "Intelligence"
     ws.icon = "setting"
@@ -372,127 +385,91 @@ def setup_workspace():
     ws.is_hidden = 0
     ws.sequence_id = 3
 
-    shortcuts = [
+    for label, doc_view, color in [
         ("I8 Agent Settings", "", "Blue"),
         ("I8 Conversation", "List", "Green"),
         ("I8 Recurring Expense", "List", "Green"),
         ("Nota Fiscal", "List", "Orange"),
         ("Inter Boleto", "List", "Blue"),
         ("I8 Decision Log", "List", "Grey"),
-    ]
-    for label, doc_view, color in shortcuts:
+    ]:
         ws.append("shortcuts", {
-            "label": label,
-            "link_to": label,
-            "type": "DocType",
-            "doc_view": doc_view,
-            "color": color,
+            "label": label, "link_to": label,
+            "type": "DocType", "doc_view": doc_view, "color": color,
         })
 
-    links = [
-        # Agent
+    for link_type, label, link_to in [
         ("Card Break", "Agent", ""),
         ("Link", "Settings", "I8 Agent Settings"),
         ("Link", "Conversations", "I8 Conversation"),
         ("Link", "Module Registry", "I8 Module Registry"),
         ("Link", "Decision Log", "I8 Decision Log"),
         ("Link", "Cost Log", "I8 Cost Log"),
-        # P2P
         ("Card Break", "P2P (Procure-to-Pay)", ""),
         ("Link", "Recurring Expenses", "I8 Recurring Expense"),
         ("Link", "Supplier Profiles", "I8 Supplier Profile"),
-        # Fiscal
         ("Card Break", "Fiscal", ""),
         ("Link", "Nota Fiscal", "Nota Fiscal"),
         ("Link", "NF Settings", "Nota Fiscal Settings"),
         ("Link", "NF Company Settings", "NF Company Settings"),
         ("Link", "NF Import Log", "NF Import Log"),
-        # Banking
         ("Card Break", "Banco Inter", ""),
         ("Link", "Inter Settings", "Banco Inter Settings"),
         ("Link", "Company Accounts", "Inter Company Account"),
         ("Link", "Boletos", "Inter Boleto"),
         ("Link", "PIX Charges", "Inter PIX Charge"),
         ("Link", "Payment Orders", "Inter Payment Order"),
-        # Banking Logs
         ("Card Break", "Banking Logs", ""),
         ("Link", "API Log", "Inter API Log"),
         ("Link", "Sync Log", "Inter Sync Log"),
         ("Link", "Webhook Log", "Inter Webhook Log"),
-    ]
-    for link_type, label, link_to in links:
+    ]:
         ws.append("links", {
-            "type": link_type,
-            "label": label,
-            "link_to": link_to,
-            "link_type": "DocType",
+            "type": link_type, "label": label,
+            "link_to": link_to, "link_type": "DocType",
         })
 
     try:
         ws.insert(ignore_permissions=True, ignore_if_duplicate=True)
-        frappe.logger().info("Created Intelligence8 workspace")
     except Exception as e:
         frappe.logger().error(f"Error creating workspace: {e}")
 
-    # Frappe 16: Create Workspace Sidebar entry for the sidebar menu
-    _setup_workspace_sidebar()
-
-    frappe.db.commit()
-    frappe.clear_cache()
-
-
-def _setup_workspace_sidebar():
-    """Create or update the Workspace Sidebar entry for Intelligence8.
-
-    In Frappe 16, the sidebar menu is driven by the 'Workspace Sidebar' DocType,
-    not the Workspace DocType directly. Each sidebar entry has child items
-    (Workspace Sidebar Item) that define the menu links.
-    """
-    # Remove old Fiscal/Bancos sidebar entries
-    for old_name in ("Fiscal", "Bancos"):
-        if frappe.db.exists("Workspace Sidebar", old_name):
-            frappe.delete_doc("Workspace Sidebar", old_name, ignore_permissions=True)
-
-    # Recreate Intelligence8 sidebar
-    if frappe.db.exists("Workspace Sidebar", "Intelligence8"):
-        frappe.delete_doc("Workspace Sidebar", "Intelligence8", ignore_permissions=True)
+    # ── Workspace Sidebar (Frappe 16 sidebar menu) ──
+    if frappe.db.exists("Workspace Sidebar", "Intelligence"):
+        frappe.delete_doc("Workspace Sidebar", "Intelligence", ignore_permissions=True)
 
     sidebar = frappe.new_doc("Workspace Sidebar")
-    sidebar.name = "Intelligence8"
+    sidebar.name = "Intelligence"
     sidebar.title = "Intelligence8"
     sidebar.header_icon = "setting"
     sidebar.module = "Intelligence"
-    sidebar.standard = 0
+    sidebar.app = "brazil_module"
+    sidebar.standard = 1
 
-    sidebar_items = [
-        # Home
-        {"label": "Home", "type": "Link", "link_to": "Intelligence8", "link_type": "Workspace"},
-        # Agent
+    for item_data in [
+        {"label": "Home", "type": "Link", "link_to": "Intelligence", "link_type": "Workspace"},
         {"label": "Agent Settings", "type": "Link", "link_to": "I8 Agent Settings", "link_type": "DocType"},
         {"label": "Conversations", "type": "Link", "link_to": "I8 Conversation", "link_type": "DocType"},
         {"label": "Decision Log", "type": "Link", "link_to": "I8 Decision Log", "link_type": "DocType"},
         {"label": "Cost Log", "type": "Link", "link_to": "I8 Cost Log", "link_type": "DocType"},
-        # P2P
         {"label": "Recurring Expenses", "type": "Link", "link_to": "I8 Recurring Expense", "link_type": "DocType"},
         {"label": "Supplier Profiles", "type": "Link", "link_to": "I8 Supplier Profile", "link_type": "DocType"},
-        # Fiscal
         {"label": "Nota Fiscal", "type": "Link", "link_to": "Nota Fiscal", "link_type": "DocType"},
         {"label": "NF Settings", "type": "Link", "link_to": "Nota Fiscal Settings", "link_type": "DocType"},
         {"label": "NF Company Settings", "type": "Link", "link_to": "NF Company Settings", "link_type": "DocType"},
         {"label": "Import Logs", "type": "Link", "link_to": "NF Import Log", "link_type": "DocType"},
-        # Banking
         {"label": "Inter Settings", "type": "Link", "link_to": "Banco Inter Settings", "link_type": "DocType"},
         {"label": "Company Accounts", "type": "Link", "link_to": "Inter Company Account", "link_type": "DocType"},
         {"label": "Boletos", "type": "Link", "link_to": "Inter Boleto", "link_type": "DocType"},
         {"label": "PIX Charges", "type": "Link", "link_to": "Inter PIX Charge", "link_type": "DocType"},
         {"label": "Payment Orders", "type": "Link", "link_to": "Inter Payment Order", "link_type": "DocType"},
-    ]
-
-    for item_data in sidebar_items:
+    ]:
         sidebar.append("items", item_data)
 
     try:
         sidebar.insert(ignore_permissions=True)
-        frappe.logger().info("Created Intelligence8 Workspace Sidebar with %d items", len(sidebar_items))
     except Exception as e:
         frappe.logger().error(f"Error creating Workspace Sidebar: {e}")
+
+    frappe.db.commit()
+    frappe.clear_cache()
