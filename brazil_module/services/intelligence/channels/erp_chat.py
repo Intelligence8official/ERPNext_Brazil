@@ -15,6 +15,7 @@ def send_message(user: str, text: str, conversation: str | None = None) -> dict:
     frappe.enqueue(
         "brazil_module.services.intelligence.agent.process_single_event",
         queue="long",
+        job_id=f"i8:erp_chat:{frappe.utils.now_datetime()}",
         event_type="human_message",
         event_id=f"erp_chat:{frappe.utils.now_datetime()}",
         event_data={

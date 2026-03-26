@@ -22,6 +22,7 @@ def check_overdue():
             frappe.enqueue(
                 "brazil_module.services.intelligence.agent.process_single_event",
                 queue="long",
+                job_id=f"i8:followup:{po['name']}",
                 event_type="follow_up_supplier",
                 event_id=f"followup:{po['name']}",
                 event_data={

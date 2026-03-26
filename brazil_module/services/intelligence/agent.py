@@ -289,6 +289,7 @@ def on_communication(doc, method=None):
         "brazil_module.services.intelligence.agent.process_single_event",
         queue="long",
         timeout=60,
+        job_id=f"i8:classify_email:{doc.name}",
         event_type="classify_email",
         event_id=doc.name,
         event_data={
@@ -309,6 +310,7 @@ def on_nota_fiscal(doc, method=None):
         "brazil_module.services.intelligence.agent.process_single_event",
         queue="long",
         timeout=120,
+        job_id=f"i8:nf_received:{doc.name}",
         event_type="nf_received",
         event_id=doc.name,
         event_data={

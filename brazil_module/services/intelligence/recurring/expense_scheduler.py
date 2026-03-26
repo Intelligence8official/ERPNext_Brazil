@@ -25,6 +25,7 @@ def daily_check():
                 "brazil_module.services.intelligence.agent.process_single_event",
                 queue="long",
                 timeout=120,
+                job_id=f"i8:recurring:{expense['name']}:{today.isoformat()}",
                 event_type="recurring_schedule",
                 event_id=f"recurring:{expense['name']}:{today.isoformat()}",
                 event_data={
