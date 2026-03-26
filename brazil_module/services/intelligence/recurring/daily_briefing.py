@@ -15,18 +15,30 @@ def scheduled_briefing():
 
 
 def build_briefing() -> str:
-    """Build the daily briefing message with key metrics."""
+    """Build the daily briefing message with key metrics.
+
+    Each section is wrapped in try/except so a failure in one section
+    doesn't prevent the rest of the briefing from being sent.
+    """
     today = date.today()
-    sections = [
-        f"*Daily Briefing — {today.strftime('%d/%m/%Y')}*\n",
-        _bank_balance_section(),
-        _receivables_section(today),
-        _payables_section(today),
-        _pending_actions_section(),
-        _recurring_expenses_section(),
-        _agent_cost_section(today),
+    section_funcs = [
+        lambda: f"*Daily Briefing — {today.strftime('%d/%m/%Y')}*\n",
+        _bank_balance_section,
+        lambda: _receivables_section(today),
+        lambda: _payables_section(today),
+        _pending_actions_section,
+        _recurring_expenses_section,
+        lambda: _agent_cost_section(today),
     ]
-    return "\n".join(s for s in sections if s)
+    sections = []
+    for func in section_funcs:
+        try:
+            result = func()
+            if result:
+                sections.append(result)
+        except Exception as e:
+            frappe.log_error(str(e), f"I8 Briefing Section Error: {func}")
+    return "\n".join(sections)
 
 
 def _bank_balance_section() -> str:
@@ -34,27 +46,34 @@ def _bank_balance_section() -> str:
     lines = ["*Saldo Bancario:*"]
 
     # Inter Company Account balances (from API sync)
-    inter_accounts = frappe.get_all(
-        "Inter Company Account",
-        filters={"enabled": 1},
-        fields=["name", "company", "current_balance", "balance_date"],
-    )
-    for acc in inter_accounts:
-        balance = float(acc.get("current_balance") or 0)
-        balance_date = acc.get("balance_date") or ""
-        lines.append(f"  Inter ({acc['company']}): R$ {balance:,.2f} ({balance_date})")
+    try:
+        inter_accounts = frappe.get_all(
+            "Inter Company Account",
+            filters={},
+            fields=["name", "company", "current_balance", "balance_date"],
+        )
+        for acc in inter_accounts:
+            balance = float(acc.get("current_balance") or 0)
+            if balance > 0:
+                balance_date = acc.get("balance_date") or ""
+                lines.append(f"  Inter ({acc['company']}): R$ {balance:,.2f} ({balance_date})")
+    except Exception:
+        pass
 
     # GL Entry balances for all bank accounts
-    gl_balances = frappe.db.sql("""
-        SELECT ba.account_name, SUM(gl.debit) - SUM(gl.credit) as balance
-        FROM `tabGL Entry` gl
-        JOIN `tabBank Account` ba ON ba.account = gl.account
-        WHERE ba.is_company_account = 1 AND gl.is_cancelled = 0
-        GROUP BY ba.account_name
-        ORDER BY balance DESC
-    """, as_dict=True)
-    for row in gl_balances:
-        lines.append(f"  {row['account_name']}: R$ {float(row['balance']):,.2f}")
+    try:
+        gl_balances = frappe.db.sql("""
+            SELECT ba.account_name, SUM(gl.debit) - SUM(gl.credit) as balance
+            FROM `tabGL Entry` gl
+            JOIN `tabBank Account` ba ON ba.account = gl.account
+            WHERE ba.is_company_account = 1 AND gl.is_cancelled = 0
+            GROUP BY ba.account_name
+            ORDER BY balance DESC
+        """, as_dict=True)
+        for row in gl_balances:
+            lines.append(f"  {row['account_name']}: R$ {float(row['balance']):,.2f}")
+    except Exception:
+        pass
 
     if len(lines) == 1:
         lines.append("  Nenhuma conta configurada")
