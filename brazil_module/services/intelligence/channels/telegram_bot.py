@@ -232,6 +232,7 @@ class TelegramBot:
                 "brazil_module.services.intelligence.recurring.planning_loop.run_reconciliation",
                 queue="long",
                 timeout=300,
+                notify_always=True,
             )
 
     def _briefing_list_approvals(self, chat_id: str) -> None:
