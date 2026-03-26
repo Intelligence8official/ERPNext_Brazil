@@ -1,5 +1,36 @@
 import frappe
 
+
+def _resolve_item_code(item_code: str) -> str:
+    """Resolve an item code to its exact name in ERPNext.
+
+    The LLM may pass item_name instead of the full item_code (e.g., 'DEVELOPMENT SERVICES'
+    instead of 'DEVELOPMENT SERVICES (ATIVO)'). This function tries exact match first,
+    then falls back to item_name match, then fuzzy search.
+    """
+    # Exact match
+    if frappe.db.exists("Item", item_code):
+        return item_code
+
+    # Match by item_name
+    match = frappe.db.get_value("Item", {"item_name": item_code}, "name")
+    if match:
+        return match
+
+    # Fuzzy: search by partial name
+    matches = frappe.get_all(
+        "Item",
+        filters={"name": ["like", f"%{item_code}%"]},
+        fields=["name"],
+        limit=1,
+    )
+    if matches:
+        return matches[0]["name"]
+
+    # Last resort: return as-is and let ERPNext validate
+    return item_code
+
+
 TOOL_SCHEMAS = [
     {
         "name": "p2p-create_purchase_order",
@@ -57,7 +88,7 @@ def execute_tool(tool_name: str, args: dict, executor) -> dict:
             "schedule_date": args["required_by"],
             "items": [
                 {
-                    "item_code": item["item_code"],
+                    "item_code": _resolve_item_code(item["item_code"]),
                     "qty": item["qty"],
                     "rate": item["rate"],
                     "schedule_date": args["required_by"],
