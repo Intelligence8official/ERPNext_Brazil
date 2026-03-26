@@ -756,38 +756,53 @@ def i8_dashboard_data():
 @frappe.whitelist()
 def i8_run_briefing():
     """Manually trigger the daily briefing."""
-    from brazil_module.services.intelligence.recurring.daily_briefing import scheduled_briefing
-    frappe.enqueue(scheduled_briefing, queue="short")
+    frappe.enqueue(
+        "brazil_module.services.intelligence.recurring.daily_briefing.scheduled_briefing",
+        queue="short",
+    )
     return {"status": "queued"}
 
 
 @frappe.whitelist()
 def i8_run_expense_scheduler():
     """Manually trigger the recurring expense scheduler."""
-    from brazil_module.services.intelligence.recurring.expense_scheduler import daily_check
-    frappe.enqueue(daily_check, queue="long", timeout=120)
+    frappe.enqueue(
+        "brazil_module.services.intelligence.recurring.expense_scheduler.daily_check",
+        queue="long",
+        timeout=120,
+    )
     return {"status": "queued"}
 
 
 @frappe.whitelist()
 def i8_run_reconciliation():
     """Manually trigger bank reconciliation."""
-    from brazil_module.services.intelligence.recurring.planning_loop import run_reconciliation
-    frappe.enqueue(run_reconciliation, queue="long", timeout=300, notify_always=True)
+    frappe.enqueue(
+        "brazil_module.services.intelligence.recurring.planning_loop.run_reconciliation",
+        queue="long",
+        timeout=300,
+        notify_always=True,
+    )
     return {"status": "queued"}
 
 
 @frappe.whitelist()
 def i8_run_followup_check():
     """Manually trigger follow-up check."""
-    from brazil_module.services.intelligence.recurring.follow_up_manager import check_overdue
-    frappe.enqueue(check_overdue, queue="long", timeout=120)
+    frappe.enqueue(
+        "brazil_module.services.intelligence.recurring.follow_up_manager.check_overdue",
+        queue="long",
+        timeout=120,
+    )
     return {"status": "queued"}
 
 
 @frappe.whitelist()
 def i8_run_payment_scheduling():
     """Manually trigger weekly payment scheduling."""
-    from brazil_module.services.intelligence.recurring.planning_loop import schedule_weekly_payments
-    frappe.enqueue(schedule_weekly_payments, queue="long", timeout=300)
+    frappe.enqueue(
+        "brazil_module.services.intelligence.recurring.planning_loop.schedule_weekly_payments",
+        queue="long",
+        timeout=300,
+    )
     return {"status": "queued"}
