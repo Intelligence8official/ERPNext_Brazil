@@ -3,15 +3,30 @@ import frappe
 TOOL_SCHEMAS = [
     {
         "name": "email-classify",
-        "description": "Classify an email into categories: FISCAL, COMMERCIAL, FINANCIAL, OPERATIONAL, SPAM, UNCERTAIN",
+        "description": (
+            "Classify an email and save the result. "
+            "Categories: FISCAL (invoices, NF, tax), COMMERCIAL (proposals, quotes, orders), "
+            "FINANCIAL (statements, receipts), OPERATIONAL (supplier responses about POs), "
+            "SPAM (marketing, newsletters), UNCERTAIN (cannot determine)"
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "subject": {"type": "string"},
-                "sender": {"type": "string"},
-                "body_snippet": {"type": "string", "description": "First 500 chars of email body"},
+                "communication": {
+                    "type": "string",
+                    "description": "Communication document name",
+                },
+                "classification": {
+                    "type": "string",
+                    "enum": ["FISCAL", "COMMERCIAL", "FINANCIAL", "OPERATIONAL", "SPAM", "UNCERTAIN"],
+                    "description": "The email classification category",
+                },
+                "reasoning": {
+                    "type": "string",
+                    "description": "Brief reason for the classification",
+                },
             },
-            "required": ["subject"],
+            "required": ["classification"],
         },
     },
     {
@@ -42,8 +57,14 @@ TOOL_SCHEMAS = [
 
 def execute_tool(tool_name: str, args: dict, executor) -> dict:
     if tool_name == "email-classify":
-        # Classification is done by the LLM itself — this tool just marks the result
-        return {"status": "classified", "note": "Classification determined by agent reasoning"}
+        classification = args.get("classification", "UNCERTAIN")
+        communication = args.get("communication")
+        if communication and frappe.db.exists("Communication", communication):
+            frappe.db.set_value("Communication", communication, {
+                "i8_processed": 1,
+                "i8_classification": classification,
+            })
+        return {"status": "classified", "classification": classification, "communication": communication}
     elif tool_name == "email-search":
         filters = {"communication_type": "Communication", "sent_or_received": "Received"}
         if args.get("sender"):
