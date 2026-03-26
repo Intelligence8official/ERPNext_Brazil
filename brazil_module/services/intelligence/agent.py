@@ -257,6 +257,30 @@ class Intelligence8Agent:
         except Exception as e:
             frappe.log_error(str(e), "I8 Learning Notification Error")
 
+    def _notify_document_created(self, tool_name: str, tool_args: dict, doc_name: str) -> None:
+        """Notify Telegram when a document is auto-created by the agent."""
+        try:
+            from brazil_module.services.intelligence.channels.telegram_bot import TelegramBot, _format_approval_description
+            bot = TelegramBot()
+            desc = _format_approval_description({"action": tool_name, "input_summary": json.dumps(tool_args, default=str)})
+            base_url = frappe.utils.get_url()
+
+            # Determine doctype for URL from tool name
+            doctype_map = {
+                "p2p-create_purchase_order": "purchase-order",
+                "fiscal-create_purchase_invoice": "purchase-invoice",
+                "banking-create_payment": "payment-entry",
+            }
+            url_doctype = doctype_map.get(tool_name, "")
+            link = f"\n[Ver no ERP]({base_url}/app/{url_doctype}/{doc_name})" if url_doctype else ""
+
+            bot.send_message(
+                bot._settings.telegram_chat_id,
+                f"*Documento criado automaticamente:*\n  {desc['title']}\n  {desc['detail']}\n  Documento: {doc_name}{link}",
+            )
+        except Exception as e:
+            frappe.log_error(str(e), "I8 Document Creation Notification Error")
+
     # Tools that are always safe to execute without approval
     ALWAYS_APPROVE_TOOLS = {
         "email-classify",   # classifying email is read-only
@@ -325,6 +349,11 @@ class Intelligence8Agent:
                     result="Success", related_doctype=doctype,
                     related_docname=result.get("name") if isinstance(result, dict) else None,
                 )
+                # Notify Telegram about auto-created documents
+                if tool_name not in self.ALWAYS_APPROVE_TOOLS:
+                    doc_name = result.get("name") if isinstance(result, dict) else None
+                    if doc_name:
+                        self._notify_document_created(tool_name, tool_args, doc_name)
                 return {"tool": tool_name, "status": "executed", "result": result}
             except Exception as e:
                 frappe.log_error(str(e), f"I8 Tool Error: {tool_name}")

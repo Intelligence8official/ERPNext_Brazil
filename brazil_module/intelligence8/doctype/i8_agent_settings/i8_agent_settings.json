@@ -53,7 +53,12 @@
         "learning_approval_count",
         "column_break_learning",
         "auto_schedule_payments",
-        "payment_schedule_day"
+        "payment_schedule_day",
+        "scheduler_section",
+        "expense_check_time",
+        "column_break_scheduler",
+        "followup_check_time",
+        "planning_loop_interval"
     ],
     "fields": [
         {
@@ -346,6 +351,36 @@
             "label": "Payment Schedule Day",
             "options": "Monday\nTuesday\nWednesday\nThursday\nFriday",
             "depends_on": "auto_schedule_payments"
+        },
+        {
+            "fieldname": "scheduler_section",
+            "fieldtype": "Section Break",
+            "label": "Scheduler"
+        },
+        {
+            "default": "07:00",
+            "fieldname": "expense_check_time",
+            "fieldtype": "Time",
+            "label": "Recurring Expense Check Time",
+            "description": "Daily time to check for due recurring expenses"
+        },
+        {
+            "default": "09:00",
+            "fieldname": "followup_check_time",
+            "fieldtype": "Time",
+            "label": "Follow-up Check Time",
+            "description": "Daily time to check for overdue NF follow-ups"
+        },
+        {
+            "fieldname": "column_break_scheduler",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "60",
+            "fieldname": "planning_loop_interval",
+            "fieldtype": "Int",
+            "label": "Planning Loop Interval (minutes)",
+            "description": "How often the planning loop runs (reconciliation, urgent payments)"
         }
     ],
     "index_web_pages_for_search": 0,
