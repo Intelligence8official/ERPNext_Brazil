@@ -57,8 +57,8 @@ class TestCheckOverdue(unittest.TestCase):
     def test_enqueues_follow_up_for_overdue(self):
         frappe.db.get_single_value.return_value = True
         frappe.get_all.side_effect = [
-            [{"name": "SP-001", "supplier": "Test", "expected_nf_days": 5,
-              "follow_up_after_days": 3, "max_follow_ups": 3, "follow_up_interval_days": 3}],
+            [{"name": "Test", "supplier_name": "Test Corp", "expected_nf_days": 5,
+              "follow_up_after_days": 3, "max_follow_ups": 3}],
             [{"name": "PO-001", "transaction_date": date(2026, 3, 10), "grand_total": 500}],
         ]
         frappe.db.exists.return_value = False

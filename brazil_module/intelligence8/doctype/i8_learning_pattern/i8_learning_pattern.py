@@ -1,5 +1,6 @@
+import frappe
 from frappe.model.document import Document
 
 
-class I8SupplierProfile(Document):
+class I8LearningPattern(Document):
     pass

@@ -47,17 +47,23 @@ class TestBuildContext(unittest.TestCase):
         self.assertIn("You handle purchase orders", result["module_context"])
 
     def test_supplier_profile_included_when_supplier_present(self):
-        frappe.get_all.side_effect = lambda *a, **kw: (
-            [{"name": "SP-001"}] if kw.get("filters", {}).get("supplier") else []
-        )
-        mock_profile = MagicMock()
-        mock_profile.as_dict.return_value = {"supplier": "Test Sup", "expected_nf_days": 5}
-        frappe.get_doc.return_value = mock_profile
+        frappe.db.exists.return_value = True
+        frappe.db.get_value.return_value = {
+            "name": "Test Sup", "supplier_name": "Test Sup", "tax_id": "12345",
+            "pix_key": None, "pix_key_type": None,
+            "i8_expected_nf_days": 5, "i8_nf_due_day": None,
+            "i8_follow_up_after_days": 7, "i8_max_follow_ups": 3,
+            "i8_auto_pay": 0, "i8_agent_notes": None,
+            "default_payment_terms_template": None,
+        }
+        frappe.get_all.return_value = []
         cb = ContextBuilder()
         result = cb.build("test", {"supplier": "Test Sup"})
         self.assertIsNotNone(result.get("supplier_profile"))
 
     def test_no_supplier_profile_when_not_found(self):
+        frappe.db.exists.return_value = False
+        frappe.db.get_value.return_value = None
         frappe.get_all.return_value = []
         cb = ContextBuilder()
         result = cb.build("test", {"supplier": "Unknown"})

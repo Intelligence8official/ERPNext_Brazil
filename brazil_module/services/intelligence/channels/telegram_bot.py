@@ -166,6 +166,17 @@ class TelegramBot:
             human_override=True,
         )
 
+        # Record learning pattern
+        try:
+            from brazil_module.services.intelligence.learning_engine import record_approval, record_rejection
+            tool_args = json.loads(log.input_summary or "{}")
+            if approved:
+                record_approval(log.action, tool_args)
+            else:
+                record_rejection(log.action, tool_args)
+        except Exception as e:
+            frappe.log_error(str(e), "I8 Learning Record Error")
+
         if approved:
             # Execute the approved tool directly instead of re-running the agent
             frappe.enqueue(

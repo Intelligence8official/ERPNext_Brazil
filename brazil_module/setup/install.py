@@ -257,6 +257,86 @@ def create_custom_fields():
                 "read_only": 1,
             },
         ],
+        "Purchase Invoice": [
+            {
+                "fieldname": "i8_section",
+                "fieldtype": "Section Break",
+                "label": "Intelligence8",
+                "insert_after": "chave_de_acesso",
+                "collapsible": 1,
+            },
+            {
+                "fieldname": "boleto_barcode",
+                "fieldtype": "Data",
+                "label": "Linha Digitavel (Boleto)",
+                "insert_after": "i8_section",
+                "description": "Barcode for boleto payment scheduling",
+            },
+        ],
+        "Supplier": [
+            {
+                "fieldname": "i8_section",
+                "fieldtype": "Section Break",
+                "label": "Intelligence8",
+                "insert_after": "default_payment_terms_template",
+                "collapsible": 1,
+            },
+            {
+                "fieldname": "pix_key",
+                "fieldtype": "Data",
+                "label": "Chave PIX",
+                "insert_after": "i8_section",
+            },
+            {
+                "fieldname": "pix_key_type",
+                "fieldtype": "Select",
+                "label": "Tipo Chave PIX",
+                "options": "\nCPF\nCNPJ\nEmail\nTelefone\nAleatoria",
+                "insert_after": "pix_key",
+            },
+            {
+                "fieldname": "i8_expected_nf_days",
+                "fieldtype": "Int",
+                "label": "Prazo NF (dias)",
+                "default": "5",
+                "insert_after": "pix_key_type",
+                "description": "Days to expect NF after PO",
+            },
+            {
+                "fieldname": "i8_nf_due_day",
+                "fieldtype": "Int",
+                "label": "Dia Emissao NF",
+                "insert_after": "i8_expected_nf_days",
+                "description": "Day of month supplier issues NF",
+            },
+            {
+                "fieldname": "i8_follow_up_after_days",
+                "fieldtype": "Int",
+                "label": "Follow-up Apos (dias)",
+                "default": "7",
+                "insert_after": "i8_nf_due_day",
+            },
+            {
+                "fieldname": "i8_max_follow_ups",
+                "fieldtype": "Int",
+                "label": "Max Follow-ups",
+                "default": "3",
+                "insert_after": "i8_follow_up_after_days",
+            },
+            {
+                "fieldname": "i8_auto_pay",
+                "fieldtype": "Check",
+                "label": "Auto Pay",
+                "insert_after": "i8_max_follow_ups",
+                "description": "Auto-pay when NF arrives",
+            },
+            {
+                "fieldname": "i8_agent_notes",
+                "fieldtype": "Long Text",
+                "label": "Notas do Agente",
+                "insert_after": "i8_auto_pay",
+            },
+        ],
     }
 
     _create_fields(fiscal_fields, module="Fiscal")
@@ -413,7 +493,7 @@ def setup_workspace():
         ("Link", "Cost Log", "I8 Cost Log"),
         ("Card Break", "P2P (Procure-to-Pay)", ""),
         ("Link", "Recurring Expenses", "I8 Recurring Expense"),
-        ("Link", "Supplier Profiles", "I8 Supplier Profile"),
+        ("Link", "Suppliers", "Supplier"),
         ("Card Break", "Fiscal", ""),
         ("Link", "Nota Fiscal", "Nota Fiscal"),
         ("Link", "NF Settings", "Nota Fiscal Settings"),
@@ -462,7 +542,7 @@ def setup_workspace():
         # ── P2P (Procure-to-Pay) ──
         {"label": "P2P", "type": "Section Break", "link_type": "DocType", "icon": "shopping-cart", "collapsible": 1, "indent": 1},
         {"label": "Recurring Expenses", "type": "Link", "link_to": "I8 Recurring Expense", "link_type": "DocType", "collapsible": 1, "child": 1},
-        {"label": "Supplier Profiles", "type": "Link", "link_to": "I8 Supplier Profile", "link_type": "DocType", "collapsible": 1, "child": 1},
+        {"label": "Suppliers", "type": "Link", "link_to": "Supplier", "link_type": "DocType", "collapsible": 1, "child": 1},
         {"label": "Purchase Order", "type": "Link", "link_to": "Purchase Order", "link_type": "DocType", "collapsible": 1, "child": 1},
         {"label": "Purchase Invoice", "type": "Link", "link_to": "Purchase Invoice", "link_type": "DocType", "collapsible": 1, "child": 1},
         # ── Fiscal ──

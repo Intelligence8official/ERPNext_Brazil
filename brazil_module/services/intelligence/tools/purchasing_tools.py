@@ -99,22 +99,18 @@ def execute_tool(tool_name: str, args: dict, executor) -> dict:
         return executor.execute("Purchase Order", "create", po_data)
     elif tool_name == "p2p-send_po_to_supplier":
         po = frappe.get_doc("Purchase Order", args["purchase_order"])
-        supplier_profile = frappe.get_all(
-            "I8 Supplier Profile",
-            filters={"supplier": po.supplier},
-            fields=["contact_email", "email_template"],
-            limit=1,
-        )
-        if supplier_profile and supplier_profile[0].get("contact_email"):
+        # Get email from Supplier's native email_id field
+        contact_email = frappe.db.get_value("Supplier", po.supplier, "email_id")
+        if contact_email:
             frappe.sendmail(
-                recipients=[supplier_profile[0]["contact_email"]],
+                recipients=[contact_email],
                 subject=f"Purchase Order {po.name}",
                 message=args.get("message", f"Please find attached PO {po.name}."),
                 reference_doctype="Purchase Order",
                 reference_name=po.name,
             )
-            return {"status": "sent", "recipient": supplier_profile[0]["contact_email"]}
-        return {"status": "no_contact", "message": "No supplier profile or contact email found"}
+            return {"status": "sent", "recipient": contact_email}
+        return {"status": "no_contact", "message": "Supplier has no email_id configured"}
     elif tool_name == "p2p-list_due_invoices":
         from datetime import date, timedelta
         days = args.get("days_ahead", 7)

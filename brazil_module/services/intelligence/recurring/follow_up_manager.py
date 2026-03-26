@@ -8,13 +8,18 @@ def check_overdue():
         return
 
     profiles = frappe.get_all(
-        "I8 Supplier Profile",
-        filters={},
+        "Supplier",
+        filters={"i8_expected_nf_days": [">", 0]},
         fields=[
-            "name", "supplier", "expected_nf_days",
-            "follow_up_after_days", "max_follow_ups", "follow_up_interval_days",
+            "name", "supplier_name",
+            "i8_expected_nf_days as expected_nf_days",
+            "i8_follow_up_after_days as follow_up_after_days",
+            "i8_max_follow_ups as max_follow_ups",
         ],
     )
+    # Map "name" to "supplier" for compatibility with _find_overdue_pos
+    for p in profiles:
+        p["supplier"] = p["name"]
 
     for profile in profiles:
         overdue_pos = _find_overdue_pos(profile)

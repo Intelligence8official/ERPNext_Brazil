@@ -47,7 +47,13 @@
         "briefing_time",
         "graceful_degradation_section",
         "circuit_breaker_threshold",
-        "circuit_breaker_recovery_seconds"
+        "circuit_breaker_recovery_seconds",
+        "learning_section",
+        "learning_enabled",
+        "learning_approval_count",
+        "column_break_learning",
+        "auto_schedule_payments",
+        "payment_schedule_day"
     ],
     "fields": [
         {
@@ -303,6 +309,43 @@
             "fieldtype": "Int",
             "label": "Circuit Breaker Recovery (seconds)",
             "description": "Seconds to wait before retrying after circuit opens"
+        },
+        {
+            "fieldname": "learning_section",
+            "fieldtype": "Section Break",
+            "label": "Learning & Automation"
+        },
+        {
+            "default": "1",
+            "fieldname": "learning_enabled",
+            "fieldtype": "Check",
+            "label": "Enable Learning Loop",
+            "description": "Agent auto-approves actions after consecutive human approvals"
+        },
+        {
+            "default": "3",
+            "fieldname": "learning_approval_count",
+            "fieldtype": "Int",
+            "label": "Approvals Before Auto-Approve",
+            "depends_on": "learning_enabled"
+        },
+        {
+            "fieldname": "column_break_learning",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "1",
+            "fieldname": "auto_schedule_payments",
+            "fieldtype": "Check",
+            "label": "Auto Schedule Payments (Weekly)"
+        },
+        {
+            "default": "Monday",
+            "fieldname": "payment_schedule_day",
+            "fieldtype": "Select",
+            "label": "Payment Schedule Day",
+            "options": "Monday\nTuesday\nWednesday\nThursday\nFriday",
+            "depends_on": "auto_schedule_payments"
         }
     ],
     "index_web_pages_for_search": 0,

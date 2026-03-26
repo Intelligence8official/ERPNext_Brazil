@@ -94,13 +94,20 @@ class ContextBuilder:
             return None
 
     def _get_supplier_profile(self, supplier: str) -> dict | None:
-        profiles = frappe.get_all(
-            "I8 Supplier Profile",
-            filters={"supplier": supplier},
-            fields=["name"],
-            limit=1,
-        )
-        if not profiles:
-            return None
-        doc = frappe.get_doc("I8 Supplier Profile", profiles[0]["name"])
-        return doc.as_dict()
+        """Get supplier I8 configuration from Supplier custom fields."""
+        if not frappe.db.exists("Supplier", supplier):
+            # Try by tax_id/CNPJ
+            supplier = frappe.db.get_value("Supplier", {"tax_id": ["like", f"%{supplier}%"]}, "name")
+            if not supplier:
+                return None
+
+        fields = [
+            "name", "supplier_name", "tax_id",
+            "pix_key", "pix_key_type",
+            "i8_expected_nf_days", "i8_nf_due_day",
+            "i8_follow_up_after_days", "i8_max_follow_ups",
+            "i8_auto_pay", "i8_agent_notes",
+            "default_payment_terms_template",
+        ]
+        data = frappe.db.get_value("Supplier", supplier, fields, as_dict=True)
+        return data

@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"i8_header_1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Intelligence8</b></span>\",\"col\":12}},{\"id\":\"i8_shortcut_1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Agent Settings\",\"col\":4}},{\"id\":\"i8_shortcut_2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Conversation\",\"col\":4}},{\"id\":\"i8_shortcut_3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Decision Log\",\"col\":4}},{\"id\":\"i8_spacer_1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"i8_header_2\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h5\\\">Finance</span>\",\"col\":12}},{\"id\":\"i8_shortcut_4\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Recurring Expense\",\"col\":4}},{\"id\":\"i8_shortcut_5\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Supplier Profile\",\"col\":4}},{\"id\":\"i8_shortcut_6\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Cost Log\",\"col\":4}}]",
+ "content": "[{\"id\":\"i8_header_1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Intelligence8</b></span>\",\"col\":12}},{\"id\":\"i8_shortcut_1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Agent Settings\",\"col\":4}},{\"id\":\"i8_shortcut_2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Conversation\",\"col\":4}},{\"id\":\"i8_shortcut_3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Decision Log\",\"col\":4}},{\"id\":\"i8_spacer_1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"i8_header_2\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h5\\\">Finance</span>\",\"col\":12}},{\"id\":\"i8_shortcut_4\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Recurring Expense\",\"col\":4}},{\"id\":\"i8_shortcut_5\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Supplier\",\"col\":4}},{\"id\":\"i8_shortcut_6\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"I8 Cost Log\",\"col\":4}}]",
  "creation": "2026-03-25 00:00:00.000000",
  "custom_blocks": [],
  "docstatus": 0,
@@ -78,7 +78,7 @@
    "is_query_report": 0,
    "label": "Supplier Profiles",
    "link_count": 0,
-   "link_to": "I8 Supplier Profile",
+   "link_to": "Supplier",
    "link_type": "DocType",
    "onboard": 1,
    "type": "Link"
@@ -157,8 +157,8 @@
   {
    "color": "Blue",
    "doc_view": "List",
-   "label": "I8 Supplier Profile",
-   "link_to": "I8 Supplier Profile",
+   "label": "Supplier",
+   "link_to": "Supplier",
    "type": "DocType"
   },
   {

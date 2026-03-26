@@ -87,6 +87,10 @@ scheduler_events = {
         "30 * * * *": [
             "brazil_module.services.intelligence.recurring.planning_loop.hourly_check"
         ],
+        # Intelligence8: Weekly payment scheduling (Monday 7:30)
+        "30 7 * * 1": [
+            "brazil_module.services.intelligence.recurring.planning_loop.schedule_weekly_payments"
+        ],
     },
     "daily": [
         "brazil_module.services.fiscal.processor.cleanup_old_logs",

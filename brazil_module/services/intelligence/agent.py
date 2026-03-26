@@ -239,6 +239,24 @@ class Intelligence8Agent:
                     return float(match.group(1))
         return 0.5
 
+    def _notify_auto_approved(self, tool_name: str, tool_args: dict, result: dict) -> None:
+        """Notify Telegram about an auto-approved action from learning."""
+        try:
+            from brazil_module.services.intelligence.channels.telegram_bot import TelegramBot
+            from brazil_module.services.intelligence.channels.telegram_bot import _format_approval_description
+
+            bot = TelegramBot()
+            desc = _format_approval_description({"action": tool_name, "input_summary": json.dumps(tool_args, default=str)})
+            doc_name = result.get("name", "") if isinstance(result, dict) else ""
+
+            msg = f"*Auto-aprovado (aprendizado):*\n  {desc['title']}\n  {desc['detail']}"
+            if doc_name:
+                msg += f"\n  Documento: {doc_name}"
+
+            bot.send_message(bot._settings.telegram_chat_id, msg)
+        except Exception as e:
+            frappe.log_error(str(e), "I8 Learning Notification Error")
+
     # Tools that are always safe to execute without approval
     ALWAYS_APPROVE_TOOLS = {
         "email-classify",   # classifying email is read-only
@@ -261,6 +279,30 @@ class Intelligence8Agent:
         amount = tool_args.get("rate", 0) * tool_args.get("qty", 1) if "rate" in tool_args else tool_args.get("amount", 0)
         action = tool_name.split("-")[-1]
         doctype = tool_args.get("doctype", "")
+
+        # Check learning patterns for non-safe tools
+        if tool_name not in self.ALWAYS_APPROVE_TOOLS:
+            try:
+                from brazil_module.services.intelligence.learning_engine import check_learned_pattern
+                if check_learned_pattern(tool_name, tool_args):
+                    try:
+                        result = execute_tool(tool_name, tool_args, self.action_executor)
+                        self.decision_engine.log_decision(
+                            event_type=event_type, module=event_data.get("module", ""),
+                            action=tool_name, actor="Agent", channel="system",
+                            confidence=confidence, model=self.select_model(event_type),
+                            input_summary=json.dumps(tool_args, default=str)[:500],
+                            reasoning="Auto-approved by Learning Loop",
+                            result="Success", related_doctype=doctype,
+                            related_docname=result.get("name") if isinstance(result, dict) else None,
+                        )
+                        self._notify_auto_approved(tool_name, tool_args, result)
+                        return {"tool": tool_name, "status": "executed", "result": result}
+                    except Exception as e:
+                        frappe.log_error(str(e), f"I8 Learning Auto-Approve Error: {tool_name}")
+                        return {"tool": tool_name, "status": "error", "message": str(e)}
+            except Exception:
+                pass  # If learning check fails, fall through to normal flow
 
         # Safe/read-only tools skip the Decision Engine entirely
         if tool_name in self.ALWAYS_APPROVE_TOOLS:

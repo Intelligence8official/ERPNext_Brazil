@@ -1,0 +1,94 @@
+{
+    "actions": [],
+    "allow_rename": 0,
+    "autoname": "hash",
+    "creation": "2026-03-26 10:00:00.000000",
+    "doctype": "DocType",
+    "engine": "InnoDB",
+    "field_order": [
+        "action",
+        "pattern_key",
+        "consecutive_approvals",
+        "last_approval_date",
+        "auto_approved_count",
+        "active"
+    ],
+    "fields": [
+        {
+            "fieldname": "action",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Action",
+            "reqd": 1
+        },
+        {
+            "fieldname": "pattern_key",
+            "fieldtype": "Data",
+            "in_list_view": 1,
+            "label": "Pattern Key",
+            "reqd": 1
+        },
+        {
+            "default": "0",
+            "fieldname": "consecutive_approvals",
+            "fieldtype": "Int",
+            "in_list_view": 1,
+            "label": "Consecutive Approvals"
+        },
+        {
+            "fieldname": "last_approval_date",
+            "fieldtype": "Date",
+            "label": "Last Approval Date"
+        },
+        {
+            "default": "0",
+            "fieldname": "auto_approved_count",
+            "fieldtype": "Int",
+            "label": "Auto Approved Count"
+        },
+        {
+            "default": "1",
+            "fieldname": "active",
+            "fieldtype": "Check",
+            "label": "Active"
+        }
+    ],
+    "index_web_pages_for_search": 0,
+    "links": [],
+    "modified": "2026-03-26 10:00:00.000000",
+    "modified_by": "Administrator",
+    "module": "Intelligence8",
+    "name": "I8 Learning Pattern",
+    "naming_rule": "Random",
+    "owner": "Administrator",
+    "permissions": [
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "System Manager",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "create": 1,
+            "delete": 1,
+            "email": 1,
+            "print": 1,
+            "read": 1,
+            "role": "Intelligence8 Admin",
+            "share": 1,
+            "write": 1
+        },
+        {
+            "read": 1,
+            "role": "Intelligence8 Viewer"
+        }
+    ],
+    "sort_field": "modified",
+    "sort_order": "DESC",
+    "states": [],
+    "track_changes": 1
+}
