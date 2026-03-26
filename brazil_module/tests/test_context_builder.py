@@ -48,14 +48,16 @@ class TestBuildContext(unittest.TestCase):
 
     def test_supplier_profile_included_when_supplier_present(self):
         frappe.db.exists.return_value = True
-        frappe.db.get_value.return_value = {
-            "name": "Test Sup", "supplier_name": "Test Sup", "tax_id": "12345",
-            "pix_key": None, "pix_key_type": None,
+        mock_supplier = MagicMock()
+        mock_supplier.name = "Test Sup"
+        mock_supplier.supplier_name = "Test Sup"
+        mock_supplier.get = lambda f, d=None: {
+            "tax_id": "12345", "pix_key": None, "pix_key_type": None,
             "i8_expected_nf_days": 5, "i8_nf_due_day": None,
             "i8_follow_up_after_days": 7, "i8_max_follow_ups": 3,
-            "i8_auto_pay": 0, "i8_agent_notes": None,
-            "default_payment_terms_template": None,
-        }
+            "i8_auto_pay": 0, "i8_agent_notes": None, "payment_terms": None,
+        }.get(f, d)
+        frappe.get_doc.return_value = mock_supplier
         frappe.get_all.return_value = []
         cb = ContextBuilder()
         result = cb.build("test", {"supplier": "Test Sup"})

@@ -288,7 +288,7 @@ def _get_payment_mode(invoice_name: str) -> str:
     # Fallback: check supplier's default payment terms
     supplier = frappe.db.get_value("Purchase Invoice", invoice_name, "supplier")
     if supplier:
-        template = frappe.db.get_value("Supplier", supplier, "default_payment_terms_template")
+        template = frappe.db.get_value("Supplier", supplier, "payment_terms")
         if template:
             terms = frappe.get_all(
                 "Payment Terms Template Detail",

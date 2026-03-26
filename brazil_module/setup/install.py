@@ -278,7 +278,7 @@ def create_custom_fields():
                 "fieldname": "i8_section",
                 "fieldtype": "Section Break",
                 "label": "Intelligence8",
-                "insert_after": "default_payment_terms_template",
+                "insert_after": "payment_terms",
                 "collapsible": 1,
             },
             {
