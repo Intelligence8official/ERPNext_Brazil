@@ -232,18 +232,34 @@ class Intelligence8Agent:
                     return float(match.group(1))
         return 0.5
 
+    # Tools that are always safe to execute without approval
+    ALWAYS_APPROVE_TOOLS = {
+        "email-classify",   # classifying email is read-only
+        "email-search",     # searching email is read-only
+        "email-get_content",  # reading email is read-only
+        "erp-read_document",  # reading documents is read-only
+        "erp-list_documents",  # listing documents is read-only
+        "erp-get_report_data",  # reporting is read-only
+        "erp-get_account_balance",  # reading balances is read-only
+        "fiscal-find_matching_pos",  # finding POs is read-only
+    }
+
     def _handle_tool_call(self, tool_block, event_type: str, event_data: dict, confidence: float) -> dict:
         tool_name = tool_block.name
         tool_args = tool_block.input
 
         amount = tool_args.get("rate", 0) * tool_args.get("qty", 1) if "rate" in tool_args else tool_args.get("amount", 0)
-        action = tool_name.split(".")[-1]
+        action = tool_name.split("-")[-1]
         doctype = tool_args.get("doctype", "")
 
-        decision = self.decision_engine.evaluate(
-            action=action, doctype=doctype,
-            confidence=confidence, amount=amount,
-        )
+        # Safe/read-only tools skip the Decision Engine entirely
+        if tool_name in self.ALWAYS_APPROVE_TOOLS:
+            decision = {"auto_approve": True, "confidence": confidence, "threshold": 0}
+        else:
+            decision = self.decision_engine.evaluate(
+                action=action, doctype=doctype,
+                confidence=confidence, amount=amount,
+            )
 
         if decision["auto_approve"]:
             try:
