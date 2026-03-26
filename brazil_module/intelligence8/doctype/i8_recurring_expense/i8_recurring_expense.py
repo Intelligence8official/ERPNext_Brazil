@@ -9,9 +9,7 @@ class I8RecurringExpense(Document):
     def validate(self):
         self._validate_dates()
         if self.active and not self.next_due:
-            self.next_due = self._calculate_next_due(
-                self.start_date or date.today()
-            )
+            self.next_due = self._calculate_first_due()
 
     def _validate_dates(self):
         if self.start_date and self.end_date:
@@ -20,7 +18,38 @@ class I8RecurringExpense(Document):
         if self.day_of_month and (self.day_of_month < 1 or self.day_of_month > 31):
             frappe.throw("Day of Month must be between 1 and 31")
 
-    def _calculate_next_due(self, after_date):
+    def _calculate_first_due(self) -> date:
+        """Calculate the first next_due date based on start_date and day_of_month.
+
+        If start_date is in the current month and day_of_month hasn't passed yet,
+        the first due is this month. If day_of_month has passed, first due is next period.
+        If start_date is in a past month, find the next upcoming due date.
+        """
+        start = self.start_date
+        if isinstance(start, str):
+            start = date.fromisoformat(start)
+        if not start:
+            start = date.today()
+
+        day = self.day_of_month or 1
+        freq = self.frequency or "Monthly"
+
+        # Try the due date in the same month as start_date
+        try:
+            max_day = calendar.monthrange(start.year, start.month)[1]
+            same_month_due = date(start.year, start.month, min(day, max_day))
+        except ValueError:
+            same_month_due = None
+
+        # If the due date in start month is on or after start_date, use it
+        if same_month_due and same_month_due >= start:
+            return same_month_due
+
+        # Otherwise, calculate next period
+        return self._calculate_next_due(same_month_due or start)
+
+    def _calculate_next_due(self, after_date) -> date:
+        """Calculate the next due date after the given date."""
         if isinstance(after_date, str):
             after_date = date.fromisoformat(after_date)
         day = self.day_of_month or 1
