@@ -124,8 +124,17 @@ Auto-aprovado (aprendizado):
 
 ---
 
-## 3. Cleanup
+## 3. Cleanup — Migrate I8 Supplier Profile → Supplier Custom Fields
 
-- Delete I8 Supplier Profile DocType and related files
-- Remove from workspace sidebar, tools, and context_builder
-- Update follow_up_manager to read from Supplier custom fields instead
+All references to I8 Supplier Profile must be updated:
+
+| File | What to change |
+|---|---|
+| `context_builder.py:98,105` | `_get_supplier_profile` → query Supplier custom fields directly |
+| `follow_up_manager.py:11` | Query Supplier instead of I8 Supplier Profile |
+| `purchasing_tools.py:103` | Query Supplier for contact_email instead of I8 Supplier Profile |
+| `setup/install.py:416,465` | Remove I8 Supplier Profile from workspace and sidebar |
+| `intelligence8/workspace/intelligence8.json:81,160` | Remove Supplier Profile shortcuts and links |
+| `intelligence8/doctype/i8_supplier_profile/` | Delete entire directory |
+| `tests/test_follow_up_manager.py` | Update mocks to use Supplier fields |
+| `tests/test_context_builder.py` | Update mocks to use Supplier fields |
