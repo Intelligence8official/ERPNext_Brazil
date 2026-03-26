@@ -208,10 +208,17 @@ class Intelligence8Agent:
                 f"ACTION REQUIRED: Process this incoming Nota Fiscal.\n\n"
                 f"Nota Fiscal: {nf_name}\n"
                 f"Supplier CNPJ: {supplier}\n\n"
-                f"Steps:\n"
-                f"1. Use fiscal-find_matching_pos to find Purchase Orders for this supplier\n"
-                f"2. If a matching PO is found, use fiscal-link_nf_to_po to link them\n"
-                f"3. Use fiscal-create_purchase_invoice to create the Purchase Invoice\n"
+                f"Follow these steps IN ORDER:\n\n"
+                f"Step 1: Call fiscal-get_nf_details to read the NF details.\n\n"
+                f"Step 2: Call fiscal-find_matching_pos to find Purchase Orders for this supplier.\n\n"
+                f"Step 3: Based on results, follow ONE of these scenarios:\n\n"
+                f"  SCENARIO A (PO found): Call fiscal-link_nf_to_po, then fiscal-create_purchase_invoice with the PO.\n\n"
+                f"  SCENARIO B (No PO, but recurring expense exists): Call fiscal-find_recurring_expense.\n"
+                f"    If found, call p2p-create_purchase_order to create the PO first,\n"
+                f"    then fiscal-link_nf_to_po and fiscal-create_purchase_invoice.\n\n"
+                f"  SCENARIO C (No PO, supplier known in ERPNext): Call fiscal-create_purchase_invoice directly (without PO).\n\n"
+                f"  SCENARIO D (Unknown supplier): Call fiscal-update_nf_status with invoice_status='Needs Review'\n"
+                f"    and explain in notes why it needs human review.\n"
             )
         else:
             parts.append(json.dumps(event_data, default=str, ensure_ascii=False))
@@ -241,7 +248,10 @@ class Intelligence8Agent:
         "erp-list_documents",  # listing documents is read-only
         "erp-get_report_data",  # reporting is read-only
         "erp-get_account_balance",  # reading balances is read-only
+        "fiscal-get_nf_details",  # reading NF is read-only
         "fiscal-find_matching_pos",  # finding POs is read-only
+        "fiscal-find_recurring_expense",  # finding recurring expenses is read-only
+        "fiscal-update_nf_status",  # updating NF status is low-risk
     }
 
     def _handle_tool_call(self, tool_block, event_type: str, event_data: dict, confidence: float) -> dict:
