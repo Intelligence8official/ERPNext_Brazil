@@ -254,20 +254,26 @@ def execute_approved_action(log_name: str):
     executor = ActionExecutor()
     try:
         result = execute_tool(tool_name, tool_args, executor)
-        # Send success notification via Telegram
         bot = TelegramBot()
         doc_name = result.get("name", "") if isinstance(result, dict) else ""
+        doctype = result.get("doctype", "") if isinstance(result, dict) else ""
+
+        # Auto-submit if enabled in settings
+        submitted = _auto_submit_if_enabled(executor, doctype, doc_name)
+        status_msg = "Criado e Submetido" if submitted else "Criado (Draft)"
+
         bot.send_message(
             bot._settings.telegram_chat_id,
-            f"Executado: {tool_name}\nDocumento: {doc_name}",
+            f"{status_msg}: {doctype} {doc_name}",
         )
+
         # Log to conversation
         from brazil_module.services.intelligence.channels.channel_router import ChannelRouter
         router = ChannelRouter()
         router.route_message(
             channel="system", direction="outgoing", actor="agent",
-            content=f"Executed approved action: {tool_name} -> {doc_name}",
-            related_doctype=result.get("doctype") if isinstance(result, dict) else None,
+            content=f"Executed: {tool_name} -> {doctype} {doc_name} ({status_msg})",
+            related_doctype=doctype,
             related_docname=doc_name,
         )
         frappe.db.commit()
@@ -281,3 +287,30 @@ def execute_approved_action(log_name: str):
             )
         except Exception:
             pass
+
+
+def _auto_submit_if_enabled(executor, doctype: str, doc_name: str) -> bool:
+    """Submit a document if auto-submit is enabled for its DocType.
+
+    Returns True if submitted, False otherwise.
+    """
+    if not doctype or not doc_name:
+        return False
+
+    settings = frappe.get_single("I8 Agent Settings")
+    auto_submit_map = {
+        "Purchase Order": settings.auto_submit_po,
+        "Purchase Invoice": settings.auto_submit_pi,
+        "Journal Entry": settings.auto_submit_je,
+        "Payment Entry": settings.auto_submit_pe,
+    }
+
+    if not auto_submit_map.get(doctype):
+        return False
+
+    try:
+        executor.execute(doctype, "submit", {"name": doc_name})
+        return True
+    except Exception as e:
+        frappe.log_error(str(e), f"I8 Auto-Submit Error: {doctype} {doc_name}")
+        return False

@@ -11,6 +11,12 @@
         "column_break_general",
         "high_value_confirmation_pin",
         "high_value_threshold",
+        "automation_section",
+        "auto_submit_po",
+        "auto_submit_pi",
+        "column_break_automation",
+        "auto_submit_je",
+        "auto_submit_pe",
         "ai_models_section",
         "anthropic_api_key",
         "enable_prompt_caching",
@@ -78,6 +84,43 @@
             "fieldname": "high_value_threshold",
             "fieldtype": "Currency",
             "label": "High Value Threshold"
+        },
+        {
+            "fieldname": "automation_section",
+            "fieldtype": "Section Break",
+            "label": "Auto Submit (after approval)"
+        },
+        {
+            "default": "0",
+            "description": "Automatically submit Purchase Orders after creation/approval",
+            "fieldname": "auto_submit_po",
+            "fieldtype": "Check",
+            "label": "Auto Submit Purchase Order"
+        },
+        {
+            "default": "0",
+            "description": "Automatically submit Purchase Invoices after creation/approval",
+            "fieldname": "auto_submit_pi",
+            "fieldtype": "Check",
+            "label": "Auto Submit Purchase Invoice"
+        },
+        {
+            "fieldname": "column_break_automation",
+            "fieldtype": "Column Break"
+        },
+        {
+            "default": "0",
+            "description": "Automatically submit Journal Entries after creation/approval",
+            "fieldname": "auto_submit_je",
+            "fieldtype": "Check",
+            "label": "Auto Submit Journal Entry"
+        },
+        {
+            "default": "0",
+            "description": "Automatically submit Payment Entries after creation/approval",
+            "fieldname": "auto_submit_pe",
+            "fieldtype": "Check",
+            "label": "Auto Submit Payment Entry"
         },
         {
             "fieldname": "ai_models_section",
