@@ -66,52 +66,74 @@ class Intelligence8Agent:
         system_prompt = build_system_prompt(self.settings, ["p2p", "fiscal", "banking"])
         tools = get_all_tool_schemas()
 
-        start = time.monotonic()
-        try:
-            response = self.client.messages.create(
-                model=model,
-                max_tokens=4096,
-                system=system_prompt + "\n\n" + context.get("module_context", ""),
-                messages=[{"role": "user", "content": self._build_user_message(event_type, event_data, context)}],
-                tools=tools,
-            )
-            _circuit_breaker.record_success()
-        except Exception as e:
-            _circuit_breaker.record_failure()
-            frappe.log_error(str(e), "Intelligence8 Claude API Error")
-            return {"status": "error", "message": str(e)}
+        system = system_prompt + "\n\n" + context.get("module_context", "")
+        messages = [{"role": "user", "content": self._build_user_message(event_type, event_data, context)}]
 
-        latency_ms = int((time.monotonic() - start) * 1000)
-        usage = response.usage
-        cache_hit = getattr(usage, "cache_read_input_tokens", 0) > 0
-
-        self.cost_tracker.log(
-            model=model,
-            tokens_in=usage.input_tokens,
-            tokens_out=usage.output_tokens,
-            latency_ms=latency_ms,
-            module=event_data.get("module", "general"),
-            function_name=event_type,
-            cache_hit=cache_hit,
-        )
-
-        confidence = self._extract_confidence(response)
-
-        # Collect text response and tool calls
+        all_results = []
         text_response = ""
-        results = []
-        for block in response.content:
-            if block.type == "text":
-                text_response += block.text
-            elif block.type == "tool_use":
-                result = self._handle_tool_call(block, event_type, event_data, confidence)
-                results.append(result)
+        max_turns = 5  # prevent infinite loops
 
-        # Send text response back to the user's channel
+        for turn in range(max_turns):
+            start = time.monotonic()
+            try:
+                response = self.client.messages.create(
+                    model=model,
+                    max_tokens=4096,
+                    system=system,
+                    messages=messages,
+                    tools=tools,
+                )
+                _circuit_breaker.record_success()
+            except Exception as e:
+                _circuit_breaker.record_failure()
+                frappe.log_error(str(e), "Intelligence8 Claude API Error")
+                return {"status": "error", "message": str(e)}
+
+            latency_ms = int((time.monotonic() - start) * 1000)
+            usage = response.usage
+            cache_hit = getattr(usage, "cache_read_input_tokens", 0) > 0
+
+            self.cost_tracker.log(
+                model=model,
+                tokens_in=usage.input_tokens,
+                tokens_out=usage.output_tokens,
+                latency_ms=latency_ms,
+                module=event_data.get("module", "general"),
+                function_name=event_type,
+                cache_hit=cache_hit,
+            )
+
+            confidence = self._extract_confidence(response)
+
+            # Collect text and tool calls from this turn
+            tool_results_for_next_turn = []
+            for block in response.content:
+                if block.type == "text":
+                    text_response += block.text
+                elif block.type == "tool_use":
+                    result = self._handle_tool_call(block, event_type, event_data, confidence)
+                    all_results.append(result)
+                    # Build tool_result for next turn
+                    tool_output = json.dumps(result.get("result", {"status": result["status"]}), default=str)
+                    tool_results_for_next_turn.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": tool_output[:4000],
+                    })
+
+            # If no tool calls or stop_reason is "end_turn", we're done
+            if response.stop_reason != "tool_use" or not tool_results_for_next_turn:
+                break
+
+            # Continue the conversation: add assistant response + tool results
+            messages.append({"role": "assistant", "content": response.content})
+            messages.append({"role": "user", "content": tool_results_for_next_turn})
+
+        # Send final text response back to the user's channel
         if text_response.strip():
             self._send_response(event_data, text_response.strip())
 
-        return {"status": "completed", "results": results, "text": text_response}
+        return {"status": "completed", "results": all_results, "text": text_response}
 
     def _send_response(self, event_data: dict, text: str) -> None:
         """Send agent's text response back to the originating channel."""
