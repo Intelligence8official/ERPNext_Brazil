@@ -17,19 +17,28 @@ def scheduled_briefing():
 def build_briefing() -> str:
     """Build the daily briefing message with key metrics.
 
+    Monday: full briefing with 7-day payables, recurring expenses, and 30-day cash flow.
+    Tue-Sun: compact briefing with today's payables only.
+
     Each section is wrapped in try/except so a failure in one section
     doesn't prevent the rest of the briefing from being sent.
     """
     today = date.today()
+    is_monday = today.weekday() == 0
+
     section_funcs = [
-        lambda: f"*Daily Briefing — {today.strftime('%d/%m/%Y')}*\n",
+        lambda: f"*Daily Briefing — {today.strftime('%d/%m/%Y')} ({'Segunda' if is_monday else _weekday_name(today)})*\n",
         _bank_balance_section,
-        lambda: _receivables_section(today),
-        lambda: _payables_section(today),
+        lambda: _payables_section(today, is_monday),
         _pending_actions_section,
-        _recurring_expenses_section,
-        lambda: _agent_cost_section(today),
     ]
+
+    if is_monday:
+        section_funcs.append(_recurring_expenses_section)
+        section_funcs.append(lambda: _cash_flow_section(today))
+
+    section_funcs.append(lambda: _agent_cost_section(today))
+
     sections = []
     for func in section_funcs:
         try:
@@ -41,11 +50,15 @@ def build_briefing() -> str:
     return "\n".join(sections)
 
 
+def _weekday_name(d: date) -> str:
+    names = ["Segunda", "Terca", "Quarta", "Quinta", "Sexta", "Sabado", "Domingo"]
+    return names[d.weekday()]
+
+
 def _bank_balance_section() -> str:
     """Bank account balances from Inter API and GL Entry."""
     lines = ["*Saldo Bancario:*"]
 
-    # Inter Company Account balances (from API sync)
     try:
         inter_accounts = frappe.get_all(
             "Inter Company Account",
@@ -60,7 +73,6 @@ def _bank_balance_section() -> str:
     except Exception:
         pass
 
-    # GL Entry balances for all bank accounts
     try:
         gl_balances = frappe.db.sql("""
             SELECT ba.account_name, SUM(gl.debit) - SUM(gl.credit) as balance
@@ -81,68 +93,71 @@ def _bank_balance_section() -> str:
     return "\n".join(lines)
 
 
-def _receivables_section(today: date) -> str:
-    """Sales Invoices: outstanding amounts."""
-    # Due today
-    due_today = frappe.get_all(
-        "Sales Invoice",
-        filters={"docstatus": 1, "outstanding_amount": [">", 0], "due_date": today.isoformat()},
-        fields=["SUM(outstanding_amount) as total"],
-    )
-    total_today = float(due_today[0].get("total") or 0) if due_today else 0
+def _payables_section(today: date, is_monday: bool) -> str:
+    """Purchase Invoices: outstanding amounts.
 
-    # Overdue
-    overdue = frappe.get_all(
-        "Sales Invoice",
-        filters={"docstatus": 1, "outstanding_amount": [">", 0], "due_date": ["<", today.isoformat()]},
-        fields=["SUM(outstanding_amount) as total", "COUNT(name) as count"],
-    )
-    total_overdue = float(overdue[0].get("total") or 0) if overdue else 0
-    count_overdue = int(overdue[0].get("count") or 0) if overdue else 0
-
-    lines = ["*Contas a Receber:*"]
-    if total_today > 0:
-        lines.append(f"  Vencendo hoje: R$ {total_today:,.2f}")
-    if total_overdue > 0:
-        lines.append(f"  Vencido: R$ {total_overdue:,.2f} ({count_overdue} faturas)")
-    if total_today == 0 and total_overdue == 0:
-        lines.append("  Nenhuma pendencia")
-    return "\n".join(lines)
-
-
-def _payables_section(today: date) -> str:
-    """Purchase Invoices: outstanding amounts."""
-    next_7 = (today + timedelta(days=7)).isoformat()
-
-    # Due in next 7 days
-    upcoming = frappe.get_all(
-        "Purchase Invoice",
-        filters={
-            "docstatus": 1,
-            "outstanding_amount": [">", 0],
-            "due_date": ["between", [today.isoformat(), next_7]],
-        },
-        fields=["SUM(outstanding_amount) as total", "COUNT(name) as count"],
-    )
-    total_upcoming = float(upcoming[0].get("total") or 0) if upcoming else 0
-    count_upcoming = int(upcoming[0].get("count") or 0) if upcoming else 0
-
-    # Overdue
-    overdue = frappe.get_all(
-        "Purchase Invoice",
-        filters={"docstatus": 1, "outstanding_amount": [">", 0], "due_date": ["<", today.isoformat()]},
-        fields=["SUM(outstanding_amount) as total", "COUNT(name) as count"],
-    )
-    total_overdue = float(overdue[0].get("total") or 0) if overdue else 0
-    count_overdue = int(overdue[0].get("count") or 0) if overdue else 0
-
+    Monday: shows next 7 days + overdue with detail per invoice.
+    Tue-Sun: shows today only + overdue summary.
+    """
     lines = ["*Contas a Pagar:*"]
-    if total_upcoming > 0:
-        lines.append(f"  Proximos 7 dias: R$ {total_upcoming:,.2f} ({count_upcoming} faturas)")
-    if total_overdue > 0:
-        lines.append(f"  Vencido: R$ {total_overdue:,.2f} ({count_overdue} faturas)")
-    if total_upcoming == 0 and total_overdue == 0:
-        lines.append("  Nenhuma pendencia")
+
+    # Overdue (always shown)
+    overdue = frappe.get_all(
+        "Purchase Invoice",
+        filters={"docstatus": 1, "outstanding_amount": [">", 0], "due_date": ["<", today.isoformat()]},
+        fields=["name", "supplier_name", "outstanding_amount", "due_date"],
+        order_by="due_date asc",
+        limit=20,
+    )
+    if overdue:
+        total_overdue = sum(float(inv.get("outstanding_amount") or 0) for inv in overdue)
+        lines.append(f"  *Vencido:* R$ {total_overdue:,.2f} ({len(overdue)} faturas)")
+        for inv in overdue[:5]:
+            supplier = (inv.get("supplier_name") or "")[:30]
+            lines.append(f"    - {inv['name']}: {supplier} R$ {float(inv['outstanding_amount']):,.2f} (venc. {inv['due_date']})")
+        if len(overdue) > 5:
+            lines.append(f"    ... e mais {len(overdue) - 5}")
+
+    if is_monday:
+        # Monday: next 7 days with detail
+        next_7 = (today + timedelta(days=7)).isoformat()
+        upcoming = frappe.get_all(
+            "Purchase Invoice",
+            filters={
+                "docstatus": 1,
+                "outstanding_amount": [">", 0],
+                "due_date": ["between", [today.isoformat(), next_7]],
+            },
+            fields=["name", "supplier_name", "outstanding_amount", "due_date"],
+            order_by="due_date asc",
+            limit=20,
+        )
+        if upcoming:
+            total_upcoming = sum(float(inv.get("outstanding_amount") or 0) for inv in upcoming)
+            lines.append(f"  *Proximos 7 dias:* R$ {total_upcoming:,.2f} ({len(upcoming)} faturas)")
+            for inv in upcoming:
+                supplier = (inv.get("supplier_name") or "")[:30]
+                lines.append(f"    - {inv['name']}: {supplier} R$ {float(inv['outstanding_amount']):,.2f} (venc. {inv['due_date']})")
+        elif not overdue:
+            lines.append("  Nenhum pagamento nos proximos 7 dias")
+    else:
+        # Tue-Sun: today only
+        due_today = frappe.get_all(
+            "Purchase Invoice",
+            filters={"docstatus": 1, "outstanding_amount": [">", 0], "due_date": today.isoformat()},
+            fields=["name", "supplier_name", "outstanding_amount"],
+            order_by="outstanding_amount desc",
+            limit=10,
+        )
+        if due_today:
+            total_today = sum(float(inv.get("outstanding_amount") or 0) for inv in due_today)
+            lines.append(f"  *Vencendo hoje:* R$ {total_today:,.2f} ({len(due_today)} faturas)")
+            for inv in due_today:
+                supplier = (inv.get("supplier_name") or "")[:30]
+                lines.append(f"    - {inv['name']}: {supplier} R$ {float(inv['outstanding_amount']):,.2f}")
+        elif not overdue:
+            lines.append("  Nenhum pagamento para hoje")
+
     return "\n".join(lines)
 
 
@@ -166,7 +181,7 @@ def _pending_actions_section() -> str:
 
 
 def _recurring_expenses_section() -> str:
-    """Recurring expenses due in the next 7 days."""
+    """Recurring expenses due in the next 7 days. Monday only."""
     today = date.today()
     next_7 = today + timedelta(days=7)
 
@@ -176,7 +191,7 @@ def _recurring_expenses_section() -> str:
             "active": 1,
             "next_due": ["between", [today.isoformat(), next_7.isoformat()]],
         },
-        fields=["title", "estimated_amount", "next_due"],
+        fields=["title", "estimated_amount", "next_due", "supplier_name"],
         order_by="next_due asc",
     )
     if not due_soon:
@@ -184,7 +199,94 @@ def _recurring_expenses_section() -> str:
 
     lines = ["*Despesas Recorrentes (proximos 7 dias):*"]
     for exp in due_soon:
-        lines.append(f"  {exp['title']}: R$ {float(exp['estimated_amount']):,.2f} (vence {exp['next_due']})")
+        supplier = (exp.get("supplier_name") or "")[:25]
+        lines.append(
+            f"  {exp['title']}: R$ {float(exp['estimated_amount']):,.2f}"
+            f" (vence {exp['next_due']})"
+            f"{f' - {supplier}' if supplier else ''}"
+        )
+    return "\n".join(lines)
+
+
+def _cash_flow_section(today: date) -> str:
+    """30-day cash flow projection. Monday only.
+
+    Considers:
+    - Current bank balance (GL)
+    - Outstanding Purchase Invoices (payables)
+    - Outstanding Sales Invoices (receivables)
+    - Active recurring expenses not yet invoiced
+    """
+    next_30 = today + timedelta(days=30)
+
+    # Current balance from GL
+    try:
+        gl_result = frappe.db.sql("""
+            SELECT SUM(gl.debit) - SUM(gl.credit) as balance
+            FROM `tabGL Entry` gl
+            JOIN `tabBank Account` ba ON ba.account = gl.account
+            WHERE ba.is_company_account = 1 AND gl.is_cancelled = 0
+        """, as_dict=True)
+        current_balance = float(gl_result[0]["balance"]) if gl_result and gl_result[0]["balance"] else 0
+    except Exception:
+        current_balance = 0
+
+    # Receivables due in next 30 days
+    try:
+        recv = frappe.db.sql("""
+            SELECT COALESCE(SUM(outstanding_amount), 0) as total
+            FROM `tabSales Invoice`
+            WHERE docstatus = 1 AND outstanding_amount > 0
+            AND due_date BETWEEN %s AND %s
+        """, (today.isoformat(), next_30.isoformat()), as_dict=True)
+        total_receivable = float(recv[0]["total"]) if recv else 0
+    except Exception:
+        total_receivable = 0
+
+    # Payables due in next 30 days
+    try:
+        paybl = frappe.db.sql("""
+            SELECT COALESCE(SUM(outstanding_amount), 0) as total
+            FROM `tabPurchase Invoice`
+            WHERE docstatus = 1 AND outstanding_amount > 0
+            AND due_date BETWEEN %s AND %s
+        """, (today.isoformat(), next_30.isoformat()), as_dict=True)
+        total_payable = float(paybl[0]["total"]) if paybl else 0
+    except Exception:
+        total_payable = 0
+
+    # Recurring expenses for next 30 days (not yet invoiced)
+    try:
+        recurring = frappe.get_all(
+            "I8 Recurring Expense",
+            filters={
+                "active": 1,
+                "next_due": ["between", [today.isoformat(), next_30.isoformat()]],
+            },
+            fields=["estimated_amount"],
+        )
+        total_recurring = sum(float(r.get("estimated_amount") or 0) for r in recurring)
+    except Exception:
+        total_recurring = 0
+
+    total_outflow = total_payable + total_recurring
+    projected_balance = current_balance + total_receivable - total_outflow
+
+    lines = [
+        "*Fluxo de Caixa (30 dias):*",
+        f"  Saldo atual: R$ {current_balance:,.2f}",
+        f"  (+) A receber: R$ {total_receivable:,.2f}",
+        f"  (-) A pagar (faturas): R$ {total_payable:,.2f}",
+    ]
+    if total_recurring > 0:
+        lines.append(f"  (-) Despesas recorrentes: R$ {total_recurring:,.2f}")
+    lines.append(f"  *Saldo projetado: R$ {projected_balance:,.2f}*")
+
+    if projected_balance < 0:
+        lines.append(f"  ⚠ ATENCAO: Saldo projetado negativo!")
+    elif projected_balance < 5000:
+        lines.append(f"  ⚠ Saldo projetado baixo")
+
     return "\n".join(lines)
 
 
