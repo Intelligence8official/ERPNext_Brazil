@@ -30,9 +30,9 @@ TOOL_SCHEMAS = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "nota_fiscal": {"type": "string"},
+                "nota_fiscal": {"type": "string", "description": "Nota Fiscal document name"},
+                "supplier_cnpj": {"type": "string", "description": "Supplier CNPJ (alternative to nota_fiscal)"},
             },
-            "required": ["nota_fiscal"],
         },
     },
 ]
@@ -54,13 +54,26 @@ def execute_tool(tool_name: str, args: dict, executor) -> dict:
         }
         return executor.execute("Purchase Invoice", "create", pi_data)
     elif tool_name == "fiscal-find_matching_pos":
-        nf = frappe.get_doc("Nota Fiscal", args["nota_fiscal"])
-        cnpj = nf.get("cnpj_emitente", "")
-        valor = float(nf.get("valor_total") or 0)
-        pos = frappe.get_all(
-            "Purchase Order",
-            filters={"supplier": ["like", f"%{cnpj}%"], "docstatus": 1},
-            fields=["name", "supplier", "grand_total", "transaction_date"],
-        )
-        return {"data": pos, "nf_amount": valor}
+        cnpj = args.get("supplier_cnpj", "")
+        valor = 0
+        if args.get("nota_fiscal") and frappe.db.exists("Nota Fiscal", args["nota_fiscal"]):
+            nf = frappe.get_doc("Nota Fiscal", args["nota_fiscal"])
+            cnpj = cnpj or nf.get("cnpj_emitente", "")
+            valor = float(nf.get("valor_total") or 0)
+
+        # Search by supplier (using CNPJ linked to Supplier)
+        suppliers = frappe.get_all("Supplier", filters={"tax_id": ["like", f"%{cnpj}%"]}, pluck="name") if cnpj else []
+
+        pos = []
+        for supplier_name in suppliers:
+            matches = frappe.get_all(
+                "Purchase Order",
+                filters={"supplier": supplier_name, "docstatus": 1, "status": ["not in", ["Completed", "Cancelled"]]},
+                fields=["name", "supplier", "grand_total", "transaction_date", "status"],
+                order_by="transaction_date desc",
+                limit=5,
+            )
+            pos.extend(matches)
+
+        return {"data": pos, "nf_amount": valor, "supplier_cnpj": cnpj}
     raise ValueError(f"Unknown tool: {tool_name}")

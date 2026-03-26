@@ -194,6 +194,18 @@ class Intelligence8Agent:
                 f"Sender: {event_data.get('sender', '')}\n"
                 f"Content: {(event_data.get('content') or '')[:500]}\n"
             )
+        elif event_type == "nf_received":
+            nf_name = event_data.get("nota_fiscal", "")
+            supplier = event_data.get("supplier", "")
+            parts.append(
+                f"ACTION REQUIRED: Process this incoming Nota Fiscal.\n\n"
+                f"Nota Fiscal: {nf_name}\n"
+                f"Supplier CNPJ: {supplier}\n\n"
+                f"Steps:\n"
+                f"1. Use fiscal-find_matching_pos to find Purchase Orders for this supplier\n"
+                f"2. If a matching PO is found, use fiscal-link_nf_to_po to link them\n"
+                f"3. Use fiscal-create_purchase_invoice to create the Purchase Invoice\n"
+            )
         else:
             parts.append(json.dumps(event_data, default=str, ensure_ascii=False))
 
