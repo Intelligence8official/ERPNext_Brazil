@@ -188,11 +188,18 @@ class Intelligence8Agent:
         elif event_type == "human_message":
             parts.append(f"User message: {event_data.get('text', '')}\n")
         elif event_type == "classify_email":
+            comm_name = event_data.get("communication", "")
             parts.append(
-                f"ACTION REQUIRED: Classify this email.\n\n"
+                f"ACTION REQUIRED: Classify this email by calling the email-classify tool.\n\n"
+                f"Communication ID: {comm_name}\n"
                 f"Subject: {event_data.get('subject', '')}\n"
                 f"Sender: {event_data.get('sender', '')}\n"
-                f"Content: {(event_data.get('content') or '')[:500]}\n"
+                f"Content: {(event_data.get('content') or '')[:500]}\n\n"
+                f"Call email-classify with:\n"
+                f"- communication: \"{comm_name}\"\n"
+                f"- classification: one of FISCAL, COMMERCIAL, FINANCIAL, OPERATIONAL, SPAM, UNCERTAIN\n"
+                f"- reasoning: brief explanation\n"
+                f"DO NOT call any other tool. Just classify and call email-classify.\n"
             )
         elif event_type == "nf_received":
             nf_name = event_data.get("nota_fiscal", "")
