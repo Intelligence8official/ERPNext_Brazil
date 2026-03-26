@@ -101,13 +101,21 @@ class ContextBuilder:
             if not supplier:
                 return None
 
-        fields = [
-            "name", "supplier_name", "tax_id",
-            "pix_key", "pix_key_type",
-            "i8_expected_nf_days", "i8_nf_due_day",
-            "i8_follow_up_after_days", "i8_max_follow_ups",
-            "i8_auto_pay", "i8_agent_notes",
-            "default_payment_terms_template",
-        ]
-        data = frappe.db.get_value("Supplier", supplier, fields, as_dict=True)
-        return data
+        try:
+            doc = frappe.get_doc("Supplier", supplier)
+            return {
+                "name": doc.name,
+                "supplier_name": doc.supplier_name,
+                "tax_id": doc.get("tax_id"),
+                "pix_key": doc.get("pix_key"),
+                "pix_key_type": doc.get("pix_key_type"),
+                "i8_expected_nf_days": doc.get("i8_expected_nf_days"),
+                "i8_nf_due_day": doc.get("i8_nf_due_day"),
+                "i8_follow_up_after_days": doc.get("i8_follow_up_after_days"),
+                "i8_max_follow_ups": doc.get("i8_max_follow_ups"),
+                "i8_auto_pay": doc.get("i8_auto_pay"),
+                "i8_agent_notes": doc.get("i8_agent_notes"),
+                "payment_terms": doc.get("payment_terms"),
+            }
+        except Exception:
+            return None
