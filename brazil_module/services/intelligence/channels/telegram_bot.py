@@ -9,12 +9,66 @@ Handles:
 - Sending messages and approval requests through the Telegram Bot API
 """
 import json
+from datetime import date
 
 import requests
 import frappe
 
 from brazil_module.services.intelligence.channels.channel_router import ChannelRouter
 from brazil_module.services.intelligence.prompts.approval_formatter import format_approval_message
+
+
+# Action name to human-readable description
+_ACTION_LABELS = {
+    "p2p-create_purchase_order": "Criar Ordem de Compra",
+    "p2p-send_po_to_supplier": "Enviar PO ao Fornecedor",
+    "fiscal-create_purchase_invoice": "Criar Fatura de Compra",
+    "fiscal-link_nf_to_po": "Vincular NF a PO",
+    "banking-create_payment": "Criar Pagamento",
+    "email-classify": "Classificar Email",
+}
+
+
+def _format_approval_description(dl: dict) -> dict:
+    """Parse a Decision Log into human-readable title and detail."""
+    action = dl.get("action", "")
+    title = _ACTION_LABELS.get(action, action)
+
+    try:
+        data = json.loads(dl.get("input_summary") or "{}")
+    except (json.JSONDecodeError, TypeError):
+        data = {}
+
+    # Build detail based on action type
+    if "purchase_order" in action:
+        supplier = (data.get("supplier") or "")[:40]
+        items = data.get("items", [])
+        total = sum(float(it.get("rate", 0)) * float(it.get("qty", 1)) for it in items)
+        detail = f"Fornecedor: {supplier}" if supplier else ""
+        if total > 0:
+            detail += f"\n  Valor: R$ {total:,.2f}"
+    elif "send_po" in action:
+        po = data.get("purchase_order", "")
+        detail = f"PO: {po}" if po and "PLACEHOLDER" not in po.upper() else "PO pendente de criacao"
+    elif "purchase_invoice" in action:
+        nf = data.get("nota_fiscal", "")
+        detail = f"Nota Fiscal: {nf}" if nf else ""
+    elif "payment" in action:
+        pi = data.get("purchase_invoice", "")
+        method = data.get("payment_method", "")
+        detail = f"Fatura: {pi}" if pi else ""
+        if method:
+            detail += f" via {method}"
+    elif "classify" in action:
+        classification = data.get("classification", "?")
+        comm = data.get("communication", "")
+        detail = f"Classificacao: {classification}"
+        if comm:
+            detail += f" (Email: {comm})"
+    else:
+        detail = str(data)[:80] if data else ""
+
+    return {"title": title, "detail": detail}
 
 TELEGRAM_API = "https://api.telegram.org/bot{token}"
 
@@ -162,47 +216,9 @@ class TelegramBot:
     def _handle_briefing_action(self, action: str, chat_id: str) -> None:
         """Handle callback buttons from the daily briefing."""
         if action == "list_approvals":
-            pending = frappe.get_all(
-                "I8 Decision Log",
-                filters={"result": "Pending", "docstatus": 0},
-                fields=["name", "action", "input_summary"],
-                order_by="creation desc",
-                limit=5,
-            )
-            if not pending:
-                self.send_message(chat_id, "Nenhuma aprovacao pendente.")
-                return
-            lines = ["*Aprovacoes pendentes:*\n"]
-            for dl in pending:
-                summary = (dl.get("input_summary") or "")[:100]
-                lines.append(f"- {dl['name']}: {dl['action']}\n  {summary}")
-            # Send with approve/reject buttons for each
-            keyboard = {"inline_keyboard": [
-                [
-                    {"text": f"Aprovar {dl['name']}", "callback_data": f"approve:{dl['name']}"},
-                    {"text": "Rejeitar", "callback_data": f"reject:{dl['name']}"},
-                ]
-                for dl in pending
-            ]}
-            self.send_message(chat_id, "\n".join(lines), keyboard)
-
+            self._briefing_list_approvals(chat_id)
         elif action == "list_overdue":
-            overdue = frappe.get_all(
-                "Purchase Invoice",
-                filters={"docstatus": 1, "outstanding_amount": [">", 0], "due_date": ["<", frappe.utils.today()]},
-                fields=["name", "supplier_name", "outstanding_amount", "due_date"],
-                order_by="due_date asc",
-                limit=10,
-            )
-            if not overdue:
-                self.send_message(chat_id, "Nenhum pagamento vencido.")
-                return
-            lines = ["*Pagamentos vencidos:*\n"]
-            for inv in overdue:
-                supplier = (inv.get("supplier_name") or "")[:30]
-                lines.append(f"- {inv['name']}: {supplier} R$ {float(inv['outstanding_amount']):,.2f} (venc. {inv['due_date']})")
-            self.send_message(chat_id, "\n".join(lines))
-
+            self._briefing_list_overdue(chat_id)
         elif action == "process_nfs":
             self.send_message(chat_id, "Processando NFs pendentes...")
             frappe.enqueue(
@@ -210,7 +226,6 @@ class TelegramBot:
                 queue="long",
                 timeout=300,
             )
-
         elif action == "reconcile":
             self.send_message(chat_id, "Executando conciliacao bancaria...")
             frappe.enqueue(
@@ -218,6 +233,73 @@ class TelegramBot:
                 queue="long",
                 timeout=300,
             )
+
+    def _briefing_list_approvals(self, chat_id: str) -> None:
+        """List pending approvals in human-readable format with action buttons."""
+        pending = frappe.get_all(
+            "I8 Decision Log",
+            filters={"result": "Pending", "docstatus": 0},
+            fields=["name", "action", "input_summary", "confidence_score", "module", "creation"],
+            order_by="creation desc",
+            limit=5,
+        )
+        if not pending:
+            self.send_message(chat_id, "Nenhuma aprovacao pendente.")
+            return
+
+        base_url = frappe.utils.get_url()
+        lines = ["*Aprovacoes pendentes:*\n"]
+
+        for dl in pending:
+            # Parse input_summary to extract human-readable info
+            description = _format_approval_description(dl)
+            doc_link = f"{base_url}/app/i8-decision-log/{dl['name']}"
+            lines.append(
+                f"*{description['title']}*\n"
+                f"  {description['detail']}\n"
+                f"  Confianca: {float(dl.get('confidence_score') or 0):.0%}\n"
+                f"  [Ver no ERP]({doc_link})\n"
+            )
+
+        keyboard = {"inline_keyboard": [
+            [
+                {"text": f"Aprovar", "callback_data": f"approve:{dl['name']}"},
+                {"text": "Rejeitar", "callback_data": f"reject:{dl['name']}"},
+                {"text": "Detalhes", "callback_data": f"details:{dl['name']}"},
+            ]
+            for dl in pending
+        ]}
+        self.send_message(chat_id, "\n".join(lines), keyboard)
+
+    def _briefing_list_overdue(self, chat_id: str) -> None:
+        """List overdue payments with document links."""
+        overdue = frappe.get_all(
+            "Purchase Invoice",
+            filters={"docstatus": 1, "outstanding_amount": [">", 0], "due_date": ["<", frappe.utils.today()]},
+            fields=["name", "supplier_name", "outstanding_amount", "due_date"],
+            order_by="due_date asc",
+            limit=10,
+        )
+        if not overdue:
+            self.send_message(chat_id, "Nenhum pagamento vencido.")
+            return
+
+        base_url = frappe.utils.get_url()
+        total = sum(float(inv.get("outstanding_amount") or 0) for inv in overdue)
+        lines = [f"*Pagamentos vencidos: R$ {total:,.2f}*\n"]
+
+        for inv in overdue:
+            supplier = (inv.get("supplier_name") or "")[:35]
+            amount = float(inv.get("outstanding_amount") or 0)
+            doc_link = f"{base_url}/app/purchase-invoice/{inv['name']}"
+            days_late = (date.today() - inv["due_date"]).days if hasattr(inv["due_date"], "isoformat") else "?"
+            lines.append(
+                f"- [{inv['name']}]({doc_link})\n"
+                f"  {supplier}\n"
+                f"  R$ {amount:,.2f} — {days_late} dias atrasado"
+            )
+
+        self.send_message(chat_id, "\n".join(lines))
 
     # ------------------------------------------------------------------
     # Message handler
