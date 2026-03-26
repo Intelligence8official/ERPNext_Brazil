@@ -21,32 +21,47 @@ def check_emails():
     """
     Scheduled job to check emails for NF attachments.
 
-    Uses Frappe's Email Account to monitor incoming emails
-    and process XML/PDF attachments.
+    Uses Intelligence8 LLM classification (i8_classification = FISCAL)
+    to identify emails that contain NF attachments. Falls back to
+    legacy pattern matching if Intelligence8 is not enabled.
     """
     settings = frappe.get_single("Nota Fiscal Settings")
 
     if not settings.enabled or not settings.email_import_enabled:
         return
 
-    if not settings.email_account:
-        return
-
-    # Get unprocessed communications from the configured email account
-    communications = frappe.get_all(
+    # Primary: process emails classified as FISCAL by Intelligence8
+    fiscal_emails = frappe.get_all(
         "Communication",
         filters={
-            "email_account": settings.email_account,
             "communication_type": "Communication",
             "sent_or_received": "Received",
-            "nf_processed": 0
+            "i8_classification": "FISCAL",
+            "nf_processed": 0,
         },
-        fields=["name", "subject", "content"],
+        fields=["name"],
         order_by="creation desc",
-        limit=50
+        limit=50,
     )
 
-    for comm in communications:
+    # Fallback: if Intelligence8 is not enabled, use legacy email_account filter
+    # for emails that haven't been classified yet
+    if not fiscal_emails and settings.email_account:
+        fiscal_emails = frappe.get_all(
+            "Communication",
+            filters={
+                "email_account": settings.email_account,
+                "communication_type": "Communication",
+                "sent_or_received": "Received",
+                "nf_processed": 0,
+                "i8_processed": 0,  # not yet classified by I8
+            },
+            fields=["name"],
+            order_by="creation desc",
+            limit=50,
+        )
+
+    for comm in fiscal_emails:
         try:
             process_email(comm["name"], settings)
         except Exception as e:
@@ -57,7 +72,11 @@ def check_nf_attachment(doc, method=None):
     """
     Hook called when a new Communication is created.
 
-    Checks if the email contains NF attachments.
+    When Intelligence8 is enabled, email classification is handled by the
+    LLM (on_communication hook). This function then processes emails that
+    were classified as FISCAL.
+
+    When Intelligence8 is disabled, falls back to legacy subject pattern matching.
     """
     settings = frappe.get_single("Nota Fiscal Settings")
 
@@ -70,11 +89,17 @@ def check_nf_attachment(doc, method=None):
     if doc.sent_or_received != "Received":
         return
 
-    # Check if from configured email account
+    # If Intelligence8 is enabled, classification is handled by on_communication hook.
+    # The scheduled check_emails() will pick up FISCAL-classified emails.
+    # No need to do pattern matching here.
+    i8_enabled = frappe.db.get_single_value("I8 Agent Settings", "enabled")
+    if i8_enabled:
+        return
+
+    # Legacy fallback: pattern matching when Intelligence8 is disabled
     if settings.email_account and doc.email_account != settings.email_account:
         return
 
-    # Check subject patterns
     if settings.email_subject_patterns:
         patterns = settings.email_subject_patterns.split("\n")
         subject_matches = False
@@ -85,7 +110,6 @@ def check_nf_attachment(doc, method=None):
                 continue
 
             if "*" in pattern:
-                # Simple wildcard matching
                 import fnmatch
                 if fnmatch.fnmatch(doc.subject.lower(), pattern.lower()):
                     subject_matches = True
@@ -95,7 +119,6 @@ def check_nf_attachment(doc, method=None):
                 break
 
         if not subject_matches:
-            # Mark as processed (no match)
             frappe.db.set_value("Communication", doc.name, "nf_processed", 1)
             return
 
@@ -103,8 +126,8 @@ def check_nf_attachment(doc, method=None):
     frappe.enqueue(
         "brazil_module.services.fiscal.email_monitor.process_email",
         comm_name=doc.name,
-        settings=None,  # Will reload
-        queue="short"
+        settings=None,
+        queue="short",
     )
 
 

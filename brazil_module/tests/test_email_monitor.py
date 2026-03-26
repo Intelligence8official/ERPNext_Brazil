@@ -72,9 +72,11 @@ class TestCheckEmails(unittest.TestCase):
         settings.email_import_enabled = True
         settings.email_account = None
         frappe.get_single.return_value = settings
+        frappe.get_all.return_value = []
 
         check_emails()
-        frappe.get_all.assert_not_called()
+        # With I8 classification, emails are checked even without email_account
+        frappe.get_all.assert_called()
 
     def test_processes_communications(self):
         settings = MagicMock()
