@@ -30,19 +30,35 @@ def build_briefing() -> str:
 
 
 def _bank_balance_section() -> str:
-    """Bank account balances."""
-    accounts = frappe.get_all(
-        "Bank Account",
-        filters={"is_company_account": 1},
-        fields=["name", "account_name", "bank_balance"],
-        limit=5,
-    )
-    if not accounts:
-        return ""
+    """Bank account balances from Inter API and GL Entry."""
     lines = ["*Saldo Bancario:*"]
-    for acc in accounts:
-        balance = float(acc.get("bank_balance") or 0)
-        lines.append(f"  {acc['account_name']}: R$ {balance:,.2f}")
+
+    # Inter Company Account balances (from API sync)
+    inter_accounts = frappe.get_all(
+        "Inter Company Account",
+        filters={"enabled": 1},
+        fields=["name", "company", "current_balance", "balance_date"],
+    )
+    for acc in inter_accounts:
+        balance = float(acc.get("current_balance") or 0)
+        balance_date = acc.get("balance_date") or ""
+        lines.append(f"  Inter ({acc['company']}): R$ {balance:,.2f} ({balance_date})")
+
+    # GL Entry balances for all bank accounts
+    gl_balances = frappe.db.sql("""
+        SELECT ba.account_name, SUM(gl.debit) - SUM(gl.credit) as balance
+        FROM `tabGL Entry` gl
+        JOIN `tabBank Account` ba ON ba.account = gl.account
+        WHERE ba.is_company_account = 1 AND gl.is_cancelled = 0
+        GROUP BY ba.account_name
+        ORDER BY balance DESC
+    """, as_dict=True)
+    for row in gl_balances:
+        lines.append(f"  {row['account_name']}: R$ {float(row['balance']):,.2f}")
+
+    if len(lines) == 1:
+        lines.append("  Nenhuma conta configurada")
+
     return "\n".join(lines)
 
 

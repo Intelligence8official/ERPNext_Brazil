@@ -69,7 +69,9 @@ class TestBuildBriefing(unittest.TestCase):
         frappe.reset_mock()
         frappe.get_all.return_value = []
         frappe.db.count.return_value = 0
-        frappe.db.sql.return_value = [{"total": 0, "calls": 0}]
+        # db.sql is called by both _bank_balance_section (GL) and _agent_cost_section
+        # Return empty list by default; cost section handles this gracefully
+        frappe.db.sql.return_value = []
 
     def test_returns_string(self):
         result = build_briefing()
@@ -84,17 +86,26 @@ class TestBuildBriefing(unittest.TestCase):
 class TestBankBalanceSection(unittest.TestCase):
     def setUp(self):
         frappe.reset_mock()
+        frappe.db.sql.return_value = []
 
-    def test_shows_balance(self):
-        frappe.get_all.return_value = [{"name": "ACC-1", "account_name": "Inter", "bank_balance": 42000}]
+    def test_shows_inter_balance(self):
+        frappe.get_all.return_value = [{"name": "ICA-1", "company": "I8", "current_balance": 42000, "balance_date": "2026-03-26"}]
+        frappe.db.sql.return_value = []
         result = _bank_balance_section()
         self.assertIn("42,000.00", result)
         self.assertIn("Inter", result)
 
-    def test_empty_when_no_accounts(self):
+    def test_shows_gl_balance(self):
         frappe.get_all.return_value = []
+        frappe.db.sql.return_value = [{"account_name": "BANCO INTER", "balance": 67488.03}]
         result = _bank_balance_section()
-        self.assertEqual(result, "")
+        self.assertIn("67,488.03", result)
+
+    def test_no_accounts(self):
+        frappe.get_all.return_value = []
+        frappe.db.sql.return_value = []
+        result = _bank_balance_section()
+        self.assertIn("Nenhuma conta", result)
 
 
 class TestReceivablesSection(unittest.TestCase):
