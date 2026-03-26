@@ -71,7 +71,14 @@ class TelegramBot:
             return
 
         data = callback.get("data", "")
-        action, _, log_name = data.partition(":")
+        parts = data.split(":", 2)
+        action = parts[0]
+        sub_action = parts[1] if len(parts) > 1 else ""
+        log_name = parts[1] if action in ("approve", "reject", "details") else ""
+
+        if action == "briefing":
+            self._handle_briefing_action(sub_action, str(callback["message"]["chat"]["id"]))
+            return
 
         if not log_name:
             return
@@ -147,6 +154,70 @@ class TelegramBot:
             self.send_message(self._settings.telegram_chat_id, text)
         except Exception as exc:
             frappe.log_error(str(exc), f"I8 Telegram Details Error: {log_name}")
+
+    # ------------------------------------------------------------------
+    # Briefing callback handler
+    # ------------------------------------------------------------------
+
+    def _handle_briefing_action(self, action: str, chat_id: str) -> None:
+        """Handle callback buttons from the daily briefing."""
+        if action == "list_approvals":
+            pending = frappe.get_all(
+                "I8 Decision Log",
+                filters={"result": "Pending", "docstatus": 0},
+                fields=["name", "action", "input_summary"],
+                order_by="creation desc",
+                limit=5,
+            )
+            if not pending:
+                self.send_message(chat_id, "Nenhuma aprovacao pendente.")
+                return
+            lines = ["*Aprovacoes pendentes:*\n"]
+            for dl in pending:
+                summary = (dl.get("input_summary") or "")[:100]
+                lines.append(f"- {dl['name']}: {dl['action']}\n  {summary}")
+            # Send with approve/reject buttons for each
+            keyboard = {"inline_keyboard": [
+                [
+                    {"text": f"Aprovar {dl['name']}", "callback_data": f"approve:{dl['name']}"},
+                    {"text": "Rejeitar", "callback_data": f"reject:{dl['name']}"},
+                ]
+                for dl in pending
+            ]}
+            self.send_message(chat_id, "\n".join(lines), keyboard)
+
+        elif action == "list_overdue":
+            overdue = frappe.get_all(
+                "Purchase Invoice",
+                filters={"docstatus": 1, "outstanding_amount": [">", 0], "due_date": ["<", frappe.utils.today()]},
+                fields=["name", "supplier_name", "outstanding_amount", "due_date"],
+                order_by="due_date asc",
+                limit=10,
+            )
+            if not overdue:
+                self.send_message(chat_id, "Nenhum pagamento vencido.")
+                return
+            lines = ["*Pagamentos vencidos:*\n"]
+            for inv in overdue:
+                supplier = (inv.get("supplier_name") or "")[:30]
+                lines.append(f"- {inv['name']}: {supplier} R$ {float(inv['outstanding_amount']):,.2f} (venc. {inv['due_date']})")
+            self.send_message(chat_id, "\n".join(lines))
+
+        elif action == "process_nfs":
+            self.send_message(chat_id, "Processando NFs pendentes...")
+            frappe.enqueue(
+                "brazil_module.services.intelligence.recurring.planning_loop.process_pending_nfs",
+                queue="long",
+                timeout=300,
+            )
+
+        elif action == "reconcile":
+            self.send_message(chat_id, "Executando conciliacao bancaria...")
+            frappe.enqueue(
+                "brazil_module.services.intelligence.recurring.planning_loop.run_reconciliation",
+                queue="long",
+                timeout=300,
+            )
 
     # ------------------------------------------------------------------
     # Message handler

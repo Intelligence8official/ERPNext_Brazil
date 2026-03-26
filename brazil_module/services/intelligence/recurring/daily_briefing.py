@@ -10,8 +10,10 @@ def scheduled_briefing():
     if not frappe.db.get_single_value("I8 Agent Settings", "briefing_enabled"):
         return
 
+    today = date.today()
     briefing = build_briefing()
-    _send_via_telegram(briefing)
+    buttons = _build_briefing_buttons(today)
+    _send_via_telegram(briefing, buttons)
 
 
 def build_briefing() -> str:
@@ -29,6 +31,7 @@ def build_briefing() -> str:
     section_funcs = [
         lambda: f"*Daily Briefing — {today.strftime('%d/%m/%Y')} ({'Segunda' if is_monday else _weekday_name(today)})*\n",
         _bank_balance_section,
+        _reconciliation_status_section,
         lambda: _payables_section(today, is_monday),
         _pending_actions_section,
     ]
@@ -307,13 +310,83 @@ def _agent_cost_section(today: date) -> str:
     return f"*Custo I8 ontem:* USD {total:.4f} ({calls} chamadas)"
 
 
-def _send_via_telegram(message: str) -> None:
+def _build_briefing_buttons(today: date) -> dict | None:
+    """Build inline keyboard buttons for actionable items in the briefing."""
+    buttons = []
+
+    # Pending approvals
+    pending = frappe.db.count("I8 Decision Log", {"result": "Pending", "docstatus": 0})
+    if pending > 0:
+        buttons.append([
+            {"text": f"Ver {pending} aprovacoes pendentes", "callback_data": "briefing:list_approvals"},
+        ])
+
+    # Overdue payables
+    overdue_count = frappe.db.count("Purchase Invoice", {
+        "docstatus": 1, "outstanding_amount": [">", 0], "due_date": ["<", today.isoformat()]
+    })
+    if overdue_count > 0:
+        buttons.append([
+            {"text": f"Ver {overdue_count} pagamentos vencidos", "callback_data": "briefing:list_overdue"},
+        ])
+
+    # NFs pending
+    try:
+        nf_pending = frappe.db.count("Nota Fiscal", {
+            "invoice_status": ["in", ["Pending", "New", ""]],
+            "processing_status": ["!=", "Cancelled"],
+        })
+        if nf_pending > 0:
+            buttons.append([
+                {"text": f"Processar {nf_pending} NFs pendentes", "callback_data": "briefing:process_nfs"},
+            ])
+    except Exception:
+        pass
+
+    # Reconciliation
+    buttons.append([
+        {"text": "Executar conciliacao bancaria", "callback_data": "briefing:reconcile"},
+    ])
+
+    if not buttons:
+        return None
+
+    return {"inline_keyboard": buttons}
+
+
+def _reconciliation_status_section() -> str:
+    """Bank reconciliation status."""
+    try:
+        unreconciled = frappe.db.count("Bank Transaction", {
+            "docstatus": 1,
+            "unallocated_amount": [">", 0],
+        })
+        total = frappe.db.count("Bank Transaction", {"docstatus": 1})
+
+        if total == 0:
+            return ""
+
+        reconciled = total - unreconciled
+        pct = (reconciled / total * 100) if total > 0 else 0
+
+        lines = ["*Conciliacao Bancaria:*"]
+        if unreconciled == 0:
+            lines.append("  Em dia (100% conciliado)")
+        else:
+            lines.append(f"  {reconciled}/{total} transacoes conciliadas ({pct:.0f}%)")
+            lines.append(f"  {unreconciled} transacoes pendentes")
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+def _send_via_telegram(message: str, reply_markup: dict | None = None) -> None:
     """Send the briefing via Telegram."""
     try:
         from brazil_module.services.intelligence.channels.telegram_bot import TelegramBot
         bot = TelegramBot()
         chat_id = frappe.db.get_single_value("I8 Agent Settings", "telegram_chat_id")
         if chat_id:
-            bot.send_message(chat_id, message)
+            bot.send_message(chat_id, message, reply_markup)
     except Exception as e:
         frappe.log_error(str(e), "I8 Daily Briefing Error")

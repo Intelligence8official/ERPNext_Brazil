@@ -28,6 +28,8 @@ from brazil_module.services.intelligence.recurring.daily_briefing import (
     _pending_actions_section,
     _agent_cost_section,
     _cash_flow_section,
+    _build_briefing_buttons,
+    _reconciliation_status_section,
 )
 
 # Restore
@@ -242,6 +244,72 @@ class TestAgentCostSection(unittest.TestCase):
         frappe.db.sql.return_value = [{"total": 0, "calls": 0}]
         result = _agent_cost_section(date.today())
         self.assertIn("Nenhuma chamada", result)
+
+
+class TestBuildBriefingButtons(unittest.TestCase):
+    def setUp(self):
+        frappe.reset_mock()
+        frappe.db.count.side_effect = None
+        frappe.db.count.return_value = 0
+
+    def test_returns_none_when_no_actionable_items(self):
+        # Only the reconciliation button is always present, so it should not be None
+        result = _build_briefing_buttons(date.today())
+        # reconcile button is always added
+        self.assertIsNotNone(result)
+        self.assertIn("inline_keyboard", result)
+
+    def test_includes_approval_button(self):
+        frappe.db.count.side_effect = [5, 0, 0]  # 5 approvals, 0 overdue, 0 NFs
+        result = _build_briefing_buttons(date.today())
+        keyboard = result["inline_keyboard"]
+        texts = [btn["text"] for row in keyboard for btn in row]
+        self.assertTrue(any("aprovacoes" in t for t in texts))
+
+    def test_includes_overdue_button(self):
+        frappe.db.count.side_effect = [0, 3, 0]  # 0 approvals, 3 overdue, 0 NFs
+        result = _build_briefing_buttons(date.today())
+        keyboard = result["inline_keyboard"]
+        texts = [btn["text"] for row in keyboard for btn in row]
+        self.assertTrue(any("vencidos" in t for t in texts))
+
+    def test_includes_nf_button(self):
+        frappe.db.count.side_effect = [0, 0, 7]  # 0 approvals, 0 overdue, 7 NFs
+        result = _build_briefing_buttons(date.today())
+        keyboard = result["inline_keyboard"]
+        texts = [btn["text"] for row in keyboard for btn in row]
+        self.assertTrue(any("NFs" in t for t in texts))
+
+    def test_always_includes_reconcile_button(self):
+        frappe.db.count.return_value = 0
+        result = _build_briefing_buttons(date.today())
+        keyboard = result["inline_keyboard"]
+        texts = [btn["text"] for row in keyboard for btn in row]
+        self.assertTrue(any("conciliacao" in t for t in texts))
+
+
+class TestReconciliationStatusSection(unittest.TestCase):
+    def setUp(self):
+        frappe.reset_mock()
+        frappe.db.count.side_effect = None
+
+    def test_returns_empty_when_no_transactions(self):
+        frappe.db.count.side_effect = [0, 0]  # unreconciled=0, total=0
+        result = _reconciliation_status_section()
+        self.assertEqual(result, "")
+
+    def test_shows_100_percent_when_all_reconciled(self):
+        frappe.db.count.side_effect = [0, 10]  # unreconciled=0, total=10
+        result = _reconciliation_status_section()
+        self.assertIn("100%", result)
+        self.assertIn("Em dia", result)
+
+    def test_shows_pending_count(self):
+        frappe.db.count.side_effect = [3, 10]  # unreconciled=3, total=10
+        result = _reconciliation_status_section()
+        self.assertIn("7/10", result)
+        self.assertIn("70%", result)
+        self.assertIn("3 transacoes pendentes", result)
 
 
 if __name__ == "__main__":

@@ -83,6 +83,10 @@ scheduler_events = {
         "0 8 * * *": [
             "brazil_module.services.intelligence.recurring.daily_briefing.scheduled_briefing"
         ],
+        # Intelligence8: Planning loop every hour at :30
+        "30 * * * *": [
+            "brazil_module.services.intelligence.recurring.planning_loop.hourly_check"
+        ],
     },
     "daily": [
         "brazil_module.services.fiscal.processor.cleanup_old_logs",
