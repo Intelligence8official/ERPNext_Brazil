@@ -9,7 +9,7 @@ def check_overdue():
 
     profiles = frappe.get_all(
         "Supplier",
-        filters={"i8_expected_nf_days": [">", 0]},
+        filters={"i8_enable_followup": 1, "i8_expected_nf_days": [">", 0]},
         fields=[
             "name", "supplier_name",
             "i8_expected_nf_days as expected_nf_days",

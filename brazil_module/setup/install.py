@@ -310,11 +310,19 @@ def create_custom_fields():
                 "description": "Day of month supplier issues NF",
             },
             {
+                "fieldname": "i8_enable_followup",
+                "fieldtype": "Check",
+                "label": "Habilitar Follow-up",
+                "insert_after": "i8_nf_due_day",
+                "description": "Send automatic follow-up emails when NF is overdue",
+            },
+            {
                 "fieldname": "i8_follow_up_after_days",
                 "fieldtype": "Int",
                 "label": "Follow-up Apos (dias)",
                 "default": "7",
-                "insert_after": "i8_nf_due_day",
+                "insert_after": "i8_enable_followup",
+                "depends_on": "i8_enable_followup",
             },
             {
                 "fieldname": "i8_max_follow_ups",
