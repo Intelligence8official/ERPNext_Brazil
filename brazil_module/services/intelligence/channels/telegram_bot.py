@@ -408,6 +408,7 @@ def execute_approved_action(log_name: str):
 
     Reads the Decision Log to get the tool name and arguments, then
     executes the tool directly via ActionExecutor.
+    After creating a PO, auto-sends to supplier if email is configured.
     """
     from brazil_module.services.intelligence.action_executor import ActionExecutor
     from brazil_module.services.intelligence.tools import execute_tool
@@ -427,10 +428,20 @@ def execute_approved_action(log_name: str):
         submitted = _auto_submit_if_enabled(executor, doctype, doc_name)
         status_msg = "Criado e Submetido" if submitted else "Criado (Draft)"
 
+        base_url = frappe.utils.get_url()
+        doctype_slug = doctype.lower().replace(" ", "-") if doctype else ""
+        link = f"\n[Ver no ERP]({base_url}/app/{doctype_slug}/{doc_name})" if doctype_slug and doc_name else ""
+
         bot.send_message(
             bot._settings.telegram_chat_id,
-            f"{status_msg}: {doctype} {doc_name}",
+            f"{status_msg}: {doctype} {doc_name}{link}",
         )
+
+        # Auto-send PO to supplier after creation
+        if tool_name == "p2p-create_purchase_order" and doc_name:
+            _auto_send_po_to_supplier(bot, doc_name, executor)
+            # Clean up any pending send_po decisions with placeholder names
+            _cleanup_placeholder_decisions()
 
         # Log to conversation
         from brazil_module.services.intelligence.channels.channel_router import ChannelRouter
@@ -452,6 +463,46 @@ def execute_approved_action(log_name: str):
             )
         except Exception:
             pass
+
+
+def _auto_send_po_to_supplier(bot, po_name: str, executor) -> None:
+    """After PO creation, auto-send to supplier if email is configured."""
+    try:
+        po = frappe.get_doc("Purchase Order", po_name)
+        contact_email = frappe.db.get_value("Supplier", po.supplier, "email_id")
+        if contact_email:
+            frappe.sendmail(
+                recipients=[contact_email],
+                subject=f"Purchase Order {po.name}",
+                message=f"Prezado fornecedor, segue a Purchase Order {po.name}.",
+                reference_doctype="Purchase Order",
+                reference_name=po.name,
+            )
+            bot.send_message(
+                bot._settings.telegram_chat_id,
+                f"PO enviada ao fornecedor: {contact_email}",
+            )
+        else:
+            bot.send_message(
+                bot._settings.telegram_chat_id,
+                f"PO {po_name}: fornecedor sem email cadastrado (email_id). Envio manual necessario.",
+            )
+    except Exception as e:
+        frappe.log_error(str(e), f"I8 Auto Send PO Error: {po_name}")
+
+
+def _cleanup_placeholder_decisions():
+    """Remove pending Decision Logs with placeholder PO names."""
+    try:
+        placeholders = frappe.db.sql("""
+            DELETE FROM `tabI8 Decision Log`
+            WHERE result = 'Pending' AND docstatus = 0
+            AND action = 'p2p-send_po_to_supplier'
+            AND (input_summary LIKE '%%PLACEHOLDER%%' OR input_summary LIKE '%%"PO"%%')
+        """)
+        frappe.db.commit()
+    except Exception:
+        pass
 
 
 def _auto_submit_if_enabled(executor, doctype: str, doc_name: str) -> bool:
