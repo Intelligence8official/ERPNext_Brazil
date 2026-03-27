@@ -86,7 +86,6 @@ def _find_match(txn: dict, bank_account: str) -> dict | None:
         if match:
             return match
 
-    # Strategy 2: Match by amount to outstanding invoices
     is_credit = flt(txn.get("deposit", 0)) > 0
     description = txn.get("description", "")
 
@@ -104,6 +103,11 @@ def _find_match(txn: dict, bank_account: str) -> dict | None:
         match = _match_to_purchase_invoice(amount, txn_date)
         if match:
             return match
+
+    # Strategy 4: Match to Journal Entry by amount + bank account GL entry
+    match = _match_to_journal_entry(amount, txn_date, bank_account, is_credit)
+    if match:
+        return match
 
     return None
 
@@ -273,6 +277,92 @@ def _match_to_payment_entry(amount: float, txn_date, description: str, is_credit
         }
 
     return None
+
+
+def _match_to_journal_entry(amount: float, txn_date, bank_account: str, is_credit: bool) -> dict | None:
+    """Match a bank transaction to a Journal Entry via GL Entry on the bank's GL account.
+
+    Looks for Journal Entries that have a GL Entry on the bank account's
+    GL account with a matching amount, not yet reconciled.
+    """
+    # Get the GL account for this bank account
+    gl_account = frappe.db.get_value("Bank Account", bank_account, "account")
+    if not gl_account:
+        return None
+
+    settings = frappe.get_single("Banco Inter Settings")
+    tolerance = flt(settings.reconcile_tolerance_percent or 1) / 100
+
+    min_amount = amount * (1 - tolerance)
+    max_amount = amount * (1 + tolerance)
+
+    # Credit in bank = debit in GL (money coming in), Debit in bank = credit in GL (money going out)
+    if is_credit:
+        amount_field = "debit"
+    else:
+        amount_field = "credit"
+
+    if isinstance(txn_date, str):
+        from datetime import date as _date
+        try:
+            txn_date = _date.fromisoformat(txn_date)
+        except ValueError:
+            txn_date = None
+
+    date_filter = ""
+    params = {
+        "account": gl_account,
+        "min_amount": min_amount,
+        "max_amount": max_amount,
+    }
+
+    if txn_date:
+        date_filter = "AND gle.posting_date >= %(from_date)s"
+        params["from_date"] = (txn_date - timedelta(days=30)).isoformat()
+
+    entries = frappe.db.sql(f"""
+        SELECT gle.voucher_type, gle.voucher_no, gle.{amount_field} as amount,
+               gle.posting_date, gle.against
+        FROM `tabGL Entry` gle
+        WHERE gle.account = %(account)s
+        AND gle.is_cancelled = 0
+        AND gle.{amount_field} BETWEEN %(min_amount)s AND %(max_amount)s
+        AND gle.voucher_type = 'Journal Entry'
+        {date_filter}
+        AND NOT EXISTS (
+            SELECT 1 FROM `tabBank Transaction Payments` btp
+            WHERE btp.payment_document = 'Journal Entry'
+            AND btp.payment_entry = gle.voucher_no
+        )
+        ORDER BY gle.posting_date DESC
+        LIMIT 5
+    """, params, as_dict=True)
+
+    if not entries:
+        return None
+
+    # If only one match, use it
+    if len(entries) == 1:
+        return {
+            "doctype": "Journal Entry",
+            "name": entries[0]["voucher_no"],
+            "amount": amount,
+        }
+
+    # Multiple matches: prefer closest date
+    if txn_date:
+        best = min(entries, key=lambda e: abs((e["posting_date"] - txn_date).days) if hasattr(e["posting_date"], "isoformat") else 999)
+        return {
+            "doctype": "Journal Entry",
+            "name": best["voucher_no"],
+            "amount": amount,
+        }
+
+    return {
+        "doctype": "Journal Entry",
+        "name": entries[0]["voucher_no"],
+        "amount": amount,
+    }
 
 
 def _allocate_transaction(
