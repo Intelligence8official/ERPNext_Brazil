@@ -466,9 +466,19 @@ def execute_approved_action(log_name: str):
 
 
 def _auto_send_po_to_supplier(bot, po_name: str, executor) -> None:
-    """After PO creation, auto-send to supplier if email is configured."""
+    """After PO creation, auto-send to supplier only if notify_supplier is enabled in Recurring Expense."""
     try:
         po = frappe.get_doc("Purchase Order", po_name)
+
+        # Check if this supplier has notify_supplier enabled in any active Recurring Expense
+        notify = frappe.get_all(
+            "I8 Recurring Expense",
+            filters={"supplier": po.supplier, "active": 1, "notify_supplier": 1},
+            limit=1,
+        )
+        if not notify:
+            return  # Supplier not marked for notification
+
         contact_email = frappe.db.get_value("Supplier", po.supplier, "email_id")
         if contact_email:
             frappe.sendmail(
