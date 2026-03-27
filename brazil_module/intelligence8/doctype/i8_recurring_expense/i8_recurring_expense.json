@@ -39,8 +39,11 @@
         "column_break_followup",
         "max_follow_ups",
         "follow_up_interval_days",
-        "payment_section",
+        "automation_section",
+        "auto_submit",
+        "column_break_auto",
         "auto_pay",
+        "payment_section",
         "payment_method",
         "column_break_payment",
         "cost_center",
@@ -251,15 +254,31 @@
             "label": "Follow Up Interval (days)"
         },
         {
-            "fieldname": "payment_section",
+            "fieldname": "automation_section",
             "fieldtype": "Section Break",
-            "label": "Payment"
+            "label": "Automation"
+        },
+        {
+            "default": "0",
+            "fieldname": "auto_submit",
+            "fieldtype": "Check",
+            "label": "Auto Submit Document",
+            "description": "Automatically submit the PO/JE after creation (skip draft)"
+        },
+        {
+            "fieldname": "column_break_auto",
+            "fieldtype": "Column Break"
         },
         {
             "default": "0",
             "fieldname": "auto_pay",
             "fieldtype": "Check",
             "label": "Auto Pay When NF Arrives"
+        },
+        {
+            "fieldname": "payment_section",
+            "fieldtype": "Section Break",
+            "label": "Payment"
         },
         {
             "fieldname": "payment_method",

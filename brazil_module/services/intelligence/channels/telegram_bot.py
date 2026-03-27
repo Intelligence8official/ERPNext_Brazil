@@ -424,8 +424,8 @@ def execute_approved_action(log_name: str):
         doc_name = result.get("name", "") if isinstance(result, dict) else ""
         doctype = result.get("doctype", "") if isinstance(result, dict) else ""
 
-        # Auto-submit if enabled in settings
-        submitted = _auto_submit_if_enabled(executor, doctype, doc_name)
+        # Auto-submit: check recurring expense setting first, then global setting
+        submitted = _auto_submit_if_enabled(executor, doctype, doc_name, tool_args)
         status_msg = "Criado e Submetido" if submitted else "Criado (Draft)"
 
         base_url = frappe.utils.get_url()
@@ -505,14 +505,42 @@ def _cleanup_placeholder_decisions():
         pass
 
 
-def _auto_submit_if_enabled(executor, doctype: str, doc_name: str) -> bool:
-    """Submit a document if auto-submit is enabled for its DocType.
+def _auto_submit_if_enabled(executor, doctype: str, doc_name: str, tool_args: dict | None = None) -> bool:
+    """Submit a document if auto-submit is enabled.
+
+    Checks in order:
+    1. Recurring Expense auto_submit setting (per-expense override)
+    2. Global Agent Settings auto_submit per DocType
 
     Returns True if submitted, False otherwise.
     """
     if not doctype or not doc_name:
         return False
 
+    # Check recurring expense setting first (per-expense override)
+    if tool_args and tool_args.get("supplier"):
+        try:
+            recurring = frappe.get_all(
+                "I8 Recurring Expense",
+                filters={"supplier": tool_args["supplier"], "active": 1},
+                fields=["auto_submit"],
+                limit=1,
+            )
+            if recurring:
+                if recurring[0].get("auto_submit"):
+                    try:
+                        executor.execute(doctype, "submit", {"name": doc_name})
+                        return True
+                    except Exception as e:
+                        frappe.log_error(str(e), f"I8 Auto-Submit Error: {doctype} {doc_name}")
+                        return False
+                else:
+                    # Recurring expense explicitly says no auto-submit
+                    return False
+        except Exception:
+            pass
+
+    # Fallback: global Agent Settings
     settings = frappe.get_single("I8 Agent Settings")
     auto_submit_map = {
         "Purchase Order": settings.auto_submit_po,
