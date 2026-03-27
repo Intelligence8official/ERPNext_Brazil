@@ -17,7 +17,6 @@ def check_overdue():
             "i8_max_follow_ups as max_follow_ups",
         ],
     )
-    # Map "name" to "supplier" for compatibility with _find_overdue_pos
     for p in profiles:
         p["supplier"] = p["name"]
 
@@ -42,6 +41,13 @@ def check_overdue():
 
 
 def _find_overdue_pos(profile: dict) -> list:
+    """Find Purchase Orders that are overdue for NF delivery.
+
+    Excludes:
+    - Completed/Cancelled POs
+    - POs that already have a Nota Fiscal linked
+    - POs that already have a Purchase Invoice linked
+    """
     expected_days = profile.get("expected_nf_days") or 5
     cutoff = date.today() - timedelta(days=expected_days)
 
@@ -50,23 +56,31 @@ def _find_overdue_pos(profile: dict) -> list:
         filters={
             "supplier": profile["supplier"],
             "docstatus": 1,
+            "status": ["not in", ["Completed", "Cancelled", "Closed"]],
             "transaction_date": ["<=", cutoff.isoformat()],
         },
-        fields=["name", "transaction_date", "grand_total"],
+        fields=["name", "transaction_date", "grand_total", "status"],
     )
 
     overdue = []
     for po in pos:
-        # Check if NF already received for this PO
-        nf_exists = frappe.db.exists(
-            "Nota Fiscal",
-            {"purchase_order": po["name"]},
+        # Skip if NF already received
+        nf_exists = frappe.db.exists("Nota Fiscal", {"purchase_order": po["name"]})
+        if nf_exists:
+            continue
+
+        # Skip if Purchase Invoice already exists for this PO
+        pi_exists = frappe.db.exists(
+            "Purchase Invoice Item",
+            {"purchase_order": po["name"], "docstatus": ["<", 2]},
         )
-        if not nf_exists:
-            txn_date = po["transaction_date"]
-            if isinstance(txn_date, str):
-                txn_date = date.fromisoformat(txn_date)
-            days_overdue = (date.today() - txn_date).days - expected_days
-            overdue.append({**po, "days_overdue": max(0, days_overdue)})
+        if pi_exists:
+            continue
+
+        txn_date = po["transaction_date"]
+        if isinstance(txn_date, str):
+            txn_date = date.fromisoformat(txn_date)
+        days_overdue = (date.today() - txn_date).days - expected_days
+        overdue.append({**po, "days_overdue": max(0, days_overdue)})
 
     return overdue
