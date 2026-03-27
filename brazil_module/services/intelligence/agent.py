@@ -324,6 +324,10 @@ class Intelligence8Agent:
         "fiscal-find_matching_pos",  # finding POs is read-only
         "fiscal-find_recurring_expense",  # finding recurring expenses is read-only
         "fiscal-update_nf_status",  # updating NF status is low-risk
+        "comm-send_email",  # sending email is operational
+        "comm-send_notification",  # sending notification is operational
+        "p2p-list_due_invoices",  # listing invoices is read-only
+        "p2p-send_po_to_supplier",  # sending PO is operational
     }
 
     def _handle_tool_call(self, tool_block, event_type: str, event_data: dict, confidence: float) -> dict:

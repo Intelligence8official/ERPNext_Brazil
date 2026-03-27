@@ -123,9 +123,11 @@ class TestProcessPendingNfs(unittest.TestCase):
         sys.modules.pop("brazil_module.services.intelligence.channels.telegram_bot", None)
 
     def test_enqueues_nfs(self):
-        frappe.get_all.return_value = [
-            {"name": "NF-001", "cnpj_emitente": "12345678000190"},
-        ]
+        frappe.get_all.return_value = [{"name": "NF-001"}]
+        mock_doc = MagicMock()
+        mock_doc.name = "NF-001"
+        mock_doc.get = lambda f, d="": {"razao_social": "Test Supplier", "valor_total": 1000, "document_type": "NF-e", "cnpj": "12345678000190"}.get(f, d)
+        frappe.get_doc.return_value = mock_doc
         process_pending_nfs()
         frappe.enqueue.assert_called_once()
 

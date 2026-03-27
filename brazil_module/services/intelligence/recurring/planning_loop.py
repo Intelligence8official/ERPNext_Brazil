@@ -129,7 +129,7 @@ def process_pending_nfs():
                 "invoice_status": ["in", ["Pending", "New", ""]],
                 "processing_status": ["!=", "Cancelled"],
             },
-            fields=["name", "cnpj_emitente", "razao_social", "valor_total", "document_type"],
+            fields=["name"],
             limit=10,
         )
 
@@ -137,29 +137,38 @@ def process_pending_nfs():
             _notify_telegram("Nenhuma NF pendente para processar.")
             return
 
-        # Show what we're about to process
+        # Load full docs to get field values safely
         lines = [f"*Processando {len(pending_nfs)} NFs pendentes:*\n"]
-        for nf in pending_nfs:
-            supplier = (nf.get("razao_social") or nf.get("cnpj_emitente") or "")[:35]
-            valor = float(nf.get("valor_total") or 0)
-            doc_type = nf.get("document_type") or "NF"
-            lines.append(f"  - {nf['name']}: {supplier} R$ {valor:,.2f} ({doc_type})")
+        nf_docs = []
+        for nf_ref in pending_nfs:
+            try:
+                nf_doc = frappe.get_doc("Nota Fiscal", nf_ref["name"])
+                supplier = (nf_doc.get("razao_social") or nf_doc.get("cnpj") or nf_doc.name)[:35]
+                valor = float(nf_doc.get("valor_total") or 0)
+                doc_type = nf_doc.get("document_type") or "NF"
+                lines.append(f"  - {nf_doc.name}: {supplier} R$ {valor:,.2f} ({doc_type})")
+                nf_docs.append(nf_doc)
+            except Exception:
+                nf_docs.append(None)
         _notify_telegram("\n".join(lines))
 
         processed = 0
         errors = 0
-        for nf in pending_nfs:
+        for nf_doc in nf_docs:
+            if not nf_doc:
+                errors += 1
+                continue
             try:
                 frappe.enqueue(
                     "brazil_module.services.intelligence.agent.process_single_event",
                     queue="long",
-                    job_id=f"i8:nf_process:{nf['name']}",
+                    job_id=f"i8:nf_process:{nf_doc.name}",
                     event_type="nf_received",
-                    event_id=nf["name"],
+                    event_id=nf_doc.name,
                     event_data={
                         "module": "fiscal",
-                        "nota_fiscal": nf["name"],
-                        "supplier": nf.get("cnpj_emitente", ""),
+                        "nota_fiscal": nf_doc.name,
+                        "supplier": nf_doc.get("cnpj") or nf_doc.get("cnpj_emitente") or "",
                     },
                     deduplicate=True,
                 )
