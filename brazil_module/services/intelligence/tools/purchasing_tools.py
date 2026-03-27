@@ -83,15 +83,25 @@ TOOL_SCHEMAS = [
 
 def execute_tool(tool_name: str, args: dict, executor) -> dict:
     if tool_name == "p2p-create_purchase_order":
+        from datetime import date as _date
+
+        required_by = args["required_by"]
+        today = _date.today().isoformat()
+
+        # ERPNext requires schedule_date >= transaction_date
+        # If the due date is in the past, use today instead
+        if required_by < today:
+            required_by = today
+
         po_data = {
             "supplier": args["supplier"],
-            "schedule_date": args["required_by"],
+            "schedule_date": required_by,
             "items": [
                 {
                     "item_code": _resolve_item_code(item["item_code"]),
                     "qty": item["qty"],
                     "rate": item["rate"],
-                    "schedule_date": args["required_by"],
+                    "schedule_date": required_by,
                 }
                 for item in args["items"]
             ],
