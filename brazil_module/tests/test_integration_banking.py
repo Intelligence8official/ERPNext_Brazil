@@ -746,21 +746,21 @@ class TestStatementReconciliation(unittest.TestCase):
 
         api_transactions = [
             {
-                "dataMovimento": "2024-03-14",
-                "tipoTransacao": "CREDITO",
-                "tipoOperacao": "PIX",
+                "dataEntrada": "2024-03-14",
+                "tipoTransacao": "PIX",
+                "tipoOperacao": "C",
                 "valor": "800.00",
-                "titulo": "PIX received from customer",
-                "descricao": "Payment for SINV-001",
+                "titulo": "Pix recebido",
+                "descricao": "PIX RECEBIDO - Payment for SINV-001",
                 "detalhes": {"endToEndId": "E2E-SYNC-001"},
             },
             {
-                "dataMovimento": "2024-03-14",
-                "tipoTransacao": "DEBITO",
-                "tipoOperacao": "TED",
+                "dataEntrada": "2024-03-14",
+                "tipoTransacao": "PAGAMENTO",
+                "tipoOperacao": "D",
                 "valor": "350.00",
-                "titulo": "TED to supplier",
-                "descricao": "Supplier payment",
+                "titulo": "Pagamento efetuado",
+                "descricao": "PAGAMENTO DE TITULO - Supplier payment",
                 "detalhes": {"codigoTransacao": "TED-SYNC-001"},
             },
         ]

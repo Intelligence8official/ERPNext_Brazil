@@ -159,12 +159,12 @@ class TestCreateBankTransaction(unittest.TestCase):
 
     def test_credit_transaction(self):
         txn_data = {
-            "dataMovimento": "2024-01-15",
-            "tipoTransacao": "CREDITO",
+            "dataEntrada": "2024-01-15",
+            "tipoTransacao": "PIX",
             "valor": "500.00",
-            "titulo": "PIX received",
-            "descricao": "Payment from customer",
-            "tipoOperacao": "PIX",
+            "titulo": "Pix recebido",
+            "descricao": "PIX RECEBIDO - Payment from customer",
+            "tipoOperacao": "C",
         }
 
         account_doc = MagicMock()
@@ -183,12 +183,12 @@ class TestCreateBankTransaction(unittest.TestCase):
 
     def test_debit_transaction(self):
         txn_data = {
-            "dataMovimento": "2024-01-14",
-            "tipoTransacao": "DEBITO",
+            "dataEntrada": "2024-01-14",
+            "tipoTransacao": "PAGAMENTO",
             "valor": "200.00",
-            "titulo": "TED sent",
-            "descricao": "",
-            "tipoOperacao": "TED",
+            "titulo": "Pagamento efetuado",
+            "descricao": "PAGAMENTO DE TITULO",
+            "tipoOperacao": "D",
         }
 
         account_doc = MagicMock()

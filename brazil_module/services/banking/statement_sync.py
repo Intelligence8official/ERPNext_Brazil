@@ -166,39 +166,43 @@ def _create_bank_transaction(txn_data: dict, account_doc) -> str:
         "detalhes": { ... additional info }
     }
     """
-    tipo = (txn_data.get("tipoTransacao") or "").upper().strip()
-    # Inter API may return "CREDITO"/"DEBITO" or "C"/"D"
-    is_credit = tipo in ("CREDITO", "C")
+    # Inter API field mapping (confirmed from live API):
+    #   tipoOperacao = "C" (credit) or "D" (debit)  ← this is credit/debit indicator
+    #   tipoTransacao = "PIX", "PAGAMENTO", etc.     ← this is the operation type
+    #   dataEntrada = "2026-03-27"                    ← this is the transaction date
+    #   valor = "508.0"                               ← amount as string
 
-    # Fallback: detect from description suffix (e.g., "| C" or "| D")
-    if not tipo:
-        desc_raw = txn_data.get("descricao") or txn_data.get("titulo") or ""
-        if desc_raw.rstrip().endswith("| C"):
-            is_credit = True
-        elif desc_raw.rstrip().endswith("| D"):
-            is_credit = False
-        # Another fallback: "recebido" in title = credit
-        titulo = (txn_data.get("titulo") or "").lower()
-        if "recebido" in titulo or "recebimento" in titulo:
-            is_credit = True
+    tipo_operacao = (txn_data.get("tipoOperacao") or "").upper().strip()
+    is_credit = tipo_operacao == "C"
+
+    # Fallback: try tipoTransacao for legacy/alternative format
+    if not tipo_operacao:
+        tipo_txn = (txn_data.get("tipoTransacao") or "").upper().strip()
+        is_credit = tipo_txn in ("CREDITO", "C")
+        # Last resort: detect from title
+        if not tipo_txn:
+            titulo = (txn_data.get("titulo") or "").lower()
+            is_credit = "recebido" in titulo or "recebimento" in titulo
 
     amount = flt(txn_data.get("valor", 0))
+
+    tipo_transacao = txn_data.get("tipoTransacao") or ""
     description_parts = [
         txn_data.get("titulo", ""),
         txn_data.get("descricao", ""),
-        txn_data.get("tipoOperacao", ""),
+        tipo_transacao,
     ]
     description = " | ".join(filter(None, description_parts))
 
     # Build reference number from available data
     reference = _build_reference(txn_data)
 
-    # Use transaction date from API; never fall back to today
-    txn_date = txn_data.get("dataMovimento") or txn_data.get("dataEntrada") or txn_data.get("dataInclusao")
+    # Transaction date: dataEntrada is the primary field from Inter API
+    txn_date = txn_data.get("dataEntrada") or txn_data.get("dataMovimento") or txn_data.get("dataInclusao")
     if not txn_date:
         frappe.logger().warning(
-            f"Bank Transaction missing date. Data keys: {list(txn_data.keys())}. "
-            f"Using today as fallback. Transaction: {description[:100]}"
+            f"Bank Transaction missing date. Keys: {list(txn_data.keys())}. "
+            f"Fallback to today. Desc: {description[:80]}"
         )
         txn_date = date.today().isoformat()
 
@@ -241,7 +245,7 @@ def _build_reference(txn_data: dict) -> str:
     if not parts:
         # Fallback: combine date + type + amount for uniqueness
         parts = [
-            txn_data.get("dataMovimento", ""),
+            txn_data.get("dataEntrada") or txn_data.get("dataMovimento", ""),
             txn_data.get("tipoOperacao", ""),
             str(txn_data.get("valor", "")),
             txn_data.get("titulo", "")[:50],
@@ -253,7 +257,7 @@ def _build_reference(txn_data: dict) -> str:
 def _is_duplicate_transaction(txn_data: dict, bank_account: str) -> bool:
     """Check if this transaction already exists as a Bank Transaction."""
     reference = _build_reference(txn_data)
-    txn_date = txn_data.get("dataMovimento")
+    txn_date = txn_data.get("dataEntrada") or txn_data.get("dataMovimento")
 
     if not reference or not txn_date:
         return False
