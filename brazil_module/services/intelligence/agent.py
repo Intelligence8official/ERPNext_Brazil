@@ -239,6 +239,36 @@ class Intelligence8Agent:
                     return float(match.group(1))
         return 0.5
 
+    def _send_approval_to_telegram(self, tool_name: str, tool_args: dict, confidence: float, log_name: str) -> None:
+        """Send approval request with inline buttons to Telegram."""
+        try:
+            from brazil_module.services.intelligence.channels.telegram_bot import TelegramBot, _format_approval_description
+
+            bot = TelegramBot()
+            desc = _format_approval_description({"action": tool_name, "input_summary": json.dumps(tool_args, default=str)})
+
+            # Calculate amount for display
+            items = tool_args.get("items", [])
+            if items:
+                amount = sum(float(it.get("rate", 0)) * float(it.get("qty", 1)) for it in items)
+                amount_str = f"R$ {amount:,.2f}"
+            elif tool_args.get("amount"):
+                amount_str = f"R$ {float(tool_args['amount']):,.2f}"
+            else:
+                amount_str = "N/A"
+
+            bot.send_approval_request({
+                "action": desc["title"],
+                "related_doctype": tool_args.get("doctype", ""),
+                "related_docname": "",
+                "amount": amount_str,
+                "confidence": confidence,
+                "reasoning": desc["detail"],
+                "decision_log_name": log_name,
+            })
+        except Exception as e:
+            frappe.log_error(str(e), "I8 Approval Telegram Error")
+
     def _notify_auto_approved(self, tool_name: str, tool_args: dict, result: dict) -> None:
         """Notify Telegram about an auto-approved action from learning."""
         try:
@@ -367,6 +397,8 @@ class Intelligence8Agent:
                 reasoning="Below confidence threshold",
                 result="Pending",
             )
+            # Send approval request to Telegram
+            self._send_approval_to_telegram(tool_name, tool_args, confidence, log_name)
             return {"tool": tool_name, "status": "pending_approval", "decision_log": log_name}
 
 
