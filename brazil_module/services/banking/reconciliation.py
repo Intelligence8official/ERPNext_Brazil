@@ -88,14 +88,19 @@ def _find_match(txn: dict, bank_account: str) -> dict | None:
 
     # Strategy 2: Match by amount to outstanding invoices
     is_credit = flt(txn.get("deposit", 0)) > 0
+    description = txn.get("description", "")
 
+    # Strategy 2: Match to Payment Entry by amount + party name in description
+    match = _match_to_payment_entry(amount, txn_date, description, is_credit)
+    if match:
+        return match
+
+    # Strategy 3: Match by amount to outstanding invoices
     if is_credit:
-        # Credit = money coming in -> match to Sales Invoice
         match = _match_to_sales_invoice(amount, txn_date)
         if match:
             return match
     else:
-        # Debit = money going out -> match to Purchase Invoice
         match = _match_to_purchase_invoice(amount, txn_date)
         if match:
             return match
@@ -199,6 +204,74 @@ def _match_to_purchase_invoice(amount: float, txn_date: date) -> dict | None:
             "name": best["name"],
             "amount": amount,
         }
+    return None
+
+
+def _match_to_payment_entry(amount: float, txn_date, description: str, is_credit: bool) -> dict | None:
+    """Match a bank transaction to a Payment Entry by amount and party name.
+
+    Looks for submitted Payment Entries that:
+    - Have matching amount (within tolerance)
+    - Are not yet reconciled (no bank transaction linked)
+    - Optionally match party name found in transaction description
+    """
+    settings = frappe.get_single("Banco Inter Settings")
+    tolerance = flt(settings.reconcile_tolerance_percent or 1) / 100
+
+    min_amount = amount * (1 - tolerance)
+    max_amount = amount * (1 + tolerance)
+
+    payment_type = "Receive" if is_credit else "Pay"
+
+    filters = {
+        "docstatus": 1,
+        "payment_type": payment_type,
+        "paid_amount": ["between", [min_amount, max_amount]],
+        "clearance_date": ["is", "not set"],
+    }
+    if txn_date:
+        if isinstance(txn_date, str):
+            from datetime import date as _date
+            try:
+                txn_date = _date.fromisoformat(txn_date)
+            except ValueError:
+                txn_date = None
+        if txn_date:
+            filters["posting_date"] = [">=", txn_date - timedelta(days=30)]
+
+    entries = frappe.get_all(
+        "Payment Entry",
+        filters=filters,
+        fields=["name", "paid_amount", "party", "party_name", "posting_date", "reference_no"],
+        order_by="posting_date desc",
+        limit=10,
+    )
+
+    if not entries:
+        return None
+
+    # Try to match by party name in description
+    description_lower = description.lower()
+    for entry in entries:
+        party_name = (entry.get("party_name") or entry.get("party") or "").lower()
+        if party_name and len(party_name) > 3:
+            # Check if any significant part of party name appears in description
+            name_parts = [p for p in party_name.split() if len(p) > 3]
+            if any(part in description_lower for part in name_parts):
+                return {
+                    "doctype": "Payment Entry",
+                    "name": entry["name"],
+                    "amount": amount,
+                }
+
+    # Fallback: best match by amount (closest)
+    if len(entries) == 1:
+        return {
+            "doctype": "Payment Entry",
+            "name": entries[0]["name"],
+            "amount": amount,
+        }
+
     return None
 
 
