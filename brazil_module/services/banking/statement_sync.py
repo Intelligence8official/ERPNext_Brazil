@@ -87,6 +87,16 @@ def sync_statements_for_company(
         transactions = client.get_statement(start_date, end_date)
         results["fetched"] = len(transactions)
 
+        # Log first transaction's raw keys for debugging date/type fields
+        if transactions:
+            sample = transactions[0]
+            frappe.logger().info(
+                f"Inter statement sample keys: {list(sample.keys())}. "
+                f"dataMovimento={sample.get('dataMovimento')}, "
+                f"tipoTransacao={sample.get('tipoTransacao')}, "
+                f"valor={sample.get('valor')}, titulo={sample.get('titulo', '')[:50]}"
+            )
+
         for txn in transactions:
             try:
                 if _is_duplicate_transaction(txn, account_doc.bank_account):
@@ -156,7 +166,22 @@ def _create_bank_transaction(txn_data: dict, account_doc) -> str:
         "detalhes": { ... additional info }
     }
     """
-    is_credit = txn_data.get("tipoTransacao", "").upper() == "CREDITO"
+    tipo = (txn_data.get("tipoTransacao") or "").upper().strip()
+    # Inter API may return "CREDITO"/"DEBITO" or "C"/"D"
+    is_credit = tipo in ("CREDITO", "C")
+
+    # Fallback: detect from description suffix (e.g., "| C" or "| D")
+    if not tipo:
+        desc_raw = txn_data.get("descricao") or txn_data.get("titulo") or ""
+        if desc_raw.rstrip().endswith("| C"):
+            is_credit = True
+        elif desc_raw.rstrip().endswith("| D"):
+            is_credit = False
+        # Another fallback: "recebido" in title = credit
+        titulo = (txn_data.get("titulo") or "").lower()
+        if "recebido" in titulo or "recebimento" in titulo:
+            is_credit = True
+
     amount = flt(txn_data.get("valor", 0))
     description_parts = [
         txn_data.get("titulo", ""),
@@ -168,8 +193,17 @@ def _create_bank_transaction(txn_data: dict, account_doc) -> str:
     # Build reference number from available data
     reference = _build_reference(txn_data)
 
+    # Use transaction date from API; never fall back to today
+    txn_date = txn_data.get("dataMovimento") or txn_data.get("dataEntrada") or txn_data.get("dataInclusao")
+    if not txn_date:
+        frappe.logger().warning(
+            f"Bank Transaction missing date. Data keys: {list(txn_data.keys())}. "
+            f"Using today as fallback. Transaction: {description[:100]}"
+        )
+        txn_date = date.today().isoformat()
+
     bt = frappe.new_doc("Bank Transaction")
-    bt.date = txn_data.get("dataMovimento", date.today().isoformat())
+    bt.date = txn_date
     bt.bank_account = account_doc.bank_account
     bt.company = account_doc.company
     bt.description = description[:500] if description else "Banco Inter transaction"
