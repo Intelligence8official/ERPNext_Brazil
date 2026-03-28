@@ -22,6 +22,30 @@ def hourly_check():
     check_overdue_payments()
     check_urgent_payments()
 
+    # Run anomaly detection once per day (at first hourly check)
+    _run_daily_checks_if_needed()
+
+
+def _run_daily_checks_if_needed():
+    """Run daily checks (anomaly detection, supplier scoring) if not run today."""
+    cache_key = f"i8:daily_checks:{date.today().isoformat()}"
+    if frappe.cache.get_value(cache_key):
+        return
+
+    try:
+        from brazil_module.services.intelligence.analytics.anomaly_detector import daily_anomaly_check
+        daily_anomaly_check()
+    except Exception as e:
+        frappe.log_error(str(e), "I8 Daily Anomaly Check Error")
+
+    try:
+        from brazil_module.services.intelligence.analytics.supplier_intelligence import update_supplier_scores
+        update_supplier_scores()
+    except Exception as e:
+        frappe.log_error(str(e), "I8 Supplier Score Update Error")
+
+    frappe.cache.set_value(cache_key, 1, expires_in_sec=86400)
+
 
 def run_reconciliation(notify_always: bool = False):
     """Auto-reconcile unmatched bank transactions for all Inter accounts.
