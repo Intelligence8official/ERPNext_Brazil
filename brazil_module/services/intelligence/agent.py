@@ -450,6 +450,14 @@ class Intelligence8Agent:
         tool_name = tool_block.name
         tool_args = tool_block.input
 
+        # Apply learning confidence adjustment
+        try:
+            from brazil_module.services.intelligence.learning_engine import get_confidence_adjustment
+            confidence += get_confidence_adjustment(tool_name, tool_args)
+            confidence = min(confidence, 1.0)  # Cap at 1.0
+        except Exception:
+            pass
+
         amount = tool_args.get("rate", 0) * tool_args.get("qty", 1) if "rate" in tool_args else tool_args.get("amount", 0)
         action = tool_name.split("-")[-1]
         doctype = tool_args.get("doctype", "")
@@ -582,3 +590,13 @@ def on_nota_fiscal(doc, method=None):
         },
         deduplicate=True,
     )
+
+    # Auto-manifest ciência if NF-e (not NFS-e or CT-e)
+    if doc.document_type in ("NF-e", "") and doc.get("chave_de_acesso") and len(doc.chave_de_acesso or "") == 44:
+        frappe.enqueue(
+            "brazil_module.services.fiscal.dfe_client.auto_manifest_ciencia",
+            queue="long",
+            job_id=f"i8:manifest:{doc.name}",
+            nota_fiscal_name=doc.name,
+            deduplicate=True,
+        )

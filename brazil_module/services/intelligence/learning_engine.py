@@ -80,6 +80,35 @@ def record_rejection(action: str, tool_args: dict) -> None:
         })
 
 
+def get_confidence_adjustment(action: str, tool_args: dict) -> float:
+    """Get a confidence adjustment based on learning history.
+
+    Returns a bonus (0.0 to 0.3) to add to the extracted confidence.
+    More approvals = higher bonus, rejections = negative adjustment.
+    """
+    settings = frappe.get_single("I8 Agent Settings")
+    if not settings.learning_enabled:
+        return 0.0
+
+    pattern_key = _build_pattern_key(action, tool_args)
+
+    pattern = frappe.db.get_value(
+        "I8 Learning Pattern",
+        {"action": action, "pattern_key": pattern_key, "active": 1},
+        ["consecutive_approvals", "auto_approved_count"],
+        as_dict=True,
+    )
+
+    if not pattern:
+        return 0.0
+
+    approvals = (pattern.get("consecutive_approvals") or 0) + (pattern.get("auto_approved_count") or 0)
+
+    # Gradual confidence boost: 0.05 per approval, max 0.3
+    bonus = min(approvals * 0.05, 0.3)
+    return bonus
+
+
 def _build_pattern_key(action: str, tool_args: dict) -> str:
     """Build a pattern key from the action and relevant args.
 

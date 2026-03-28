@@ -1293,3 +1293,121 @@ def send_error_alert(subject, error_message, context=None):
         frappe.logger().info(f"Error alert sent: {subject}")
     except Exception as e:
         frappe.logger().error(f"Failed to send error alert: {e}")
+
+
+def manifest_nfe(company_settings_name: str, chave_acesso: str, tipo_evento: int = 210210) -> dict:
+    """Send NF-e manifestation (ciência da operação) to SEFAZ.
+
+    Args:
+        company_settings_name: NF Company Settings name
+        chave_acesso: 44-digit NF-e access key
+        tipo_evento: Manifestation type
+            210200 = Confirmação da Operação
+            210210 = Ciência da Operação (most common)
+            210220 = Desconhecimento da Operação
+            210240 = Operação não Realizada
+
+    Returns:
+        Dict with result status and SEFAZ response
+    """
+    company_settings = frappe.get_doc("NF Company Settings", company_settings_name)
+    settings = frappe.get_single("Nota Fiscal Settings")
+
+    if not company_settings.certificate_valid:
+        return {"status": "error", "message": "Certificate not valid"}
+
+    env = _get_sefaz_environment(company_settings, settings)
+    endpoint = SEFAZ_ENDPOINTS["nfe"].get(env)
+
+    if not endpoint:
+        return {"status": "error", "message": f"No endpoint for NF-e in {env}"}
+
+    certificate_password = company_settings.get_certificate_password()
+    cnpj = (company_settings.cnpj or "").replace(".", "").replace("/", "").replace("-", "")
+    tpAmb = "1" if env == "production" else "2"
+
+    # Build manifestation SOAP envelope
+    soap_envelope = _build_manifestation_request(tpAmb, cnpj, chave_acesso, tipo_evento)
+
+    with CertificateContext(company_settings.certificate_file, certificate_password) as (cert_path, key_path):
+        session = requests.Session()
+        session.cert = (cert_path, key_path)
+
+        headers = {
+            "Content-Type": "application/soap+xml; charset=utf-8",
+            "SOAPAction": "http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse",
+        }
+
+        try:
+            response = _request_with_retry(session, "post", endpoint, data=soap_envelope, headers=headers, timeout=60)
+
+            if response.status_code == 429:
+                return _handle_429_response(response, company_settings)
+
+            response.raise_for_status()
+
+            frappe.logger().info(f"NF-e Manifestation: chave={chave_acesso[:20]}..., tipo={tipo_evento}, status={response.status_code}")
+
+            return {
+                "status": "success",
+                "chave_acesso": chave_acesso,
+                "tipo_evento": tipo_evento,
+                "http_status": response.status_code,
+            }
+
+        except Exception as e:
+            frappe.log_error(str(e), f"NF-e Manifestation Error: {chave_acesso[:20]}...")
+            return {"status": "error", "message": str(e)}
+
+
+def _build_manifestation_request(tpAmb: str, cnpj: str, chave_acesso: str, tipo_evento: int) -> str:
+    """Build SOAP envelope for NF-e manifestation."""
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <soap12:Body>
+    <nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">
+      <nfeDadosMsg>
+        <distDFeInt versao="1.01" xmlns="http://www.portalfiscal.inf.br/nfe">
+          <tpAmb>{tpAmb}</tpAmb>
+          <cUFAutor>35</cUFAutor>
+          <CNPJ>{cnpj}</CNPJ>
+          <consChNFe>
+            <chNFe>{chave_acesso}</chNFe>
+          </consChNFe>
+        </distDFeInt>
+      </nfeDadosMsg>
+    </nfeDistDFeInteresse>
+  </soap12:Body>
+</soap12:Envelope>"""
+
+
+def auto_manifest_ciencia(nota_fiscal_name: str):
+    """Auto-manifest ciência for a new NF-e."""
+    try:
+        nf = frappe.get_doc("Nota Fiscal", nota_fiscal_name)
+        if not nf.get("chave_de_acesso") or len(nf.chave_de_acesso) != 44:
+            return
+
+        # Find the company settings for this NF
+        company_settings = frappe.get_all(
+            "NF Company Settings",
+            filters={"company": nf.company, "certificate_valid": 1},
+            pluck="name",
+            limit=1,
+        )
+        if not company_settings:
+            return
+
+        result = manifest_nfe(company_settings[0], nf.chave_de_acesso, tipo_evento=210210)
+
+        if result.get("status") == "success":
+            frappe.db.set_value("Nota Fiscal", nota_fiscal_name, "manifestacao_status", "Ciência")
+            frappe.logger().info(f"Auto-manifested ciência: {nota_fiscal_name}")
+        else:
+            frappe.logger().warning(f"Manifestation failed: {nota_fiscal_name} - {result.get('message')}")
+
+        frappe.db.commit()
+    except Exception as e:
+        frappe.log_error(str(e), f"Auto Manifestation Error: {nota_fiscal_name}")

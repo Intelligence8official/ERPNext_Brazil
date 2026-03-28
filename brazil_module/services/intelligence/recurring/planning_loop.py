@@ -44,6 +44,13 @@ def _run_daily_checks_if_needed():
     except Exception as e:
         frappe.log_error(str(e), "I8 Supplier Score Update Error")
 
+    try:
+        from brazil_module.services.intelligence.analytics.compliance import check_nf_cancellations, check_tax_anomalies
+        check_nf_cancellations()
+        check_tax_anomalies()
+    except Exception as e:
+        frappe.log_error(str(e), "I8 Compliance Check Error")
+
     frappe.cache.set_value(cache_key, 1, expires_in_sec=86400)
 
 
