@@ -308,6 +308,13 @@ class Intelligence8Agent:
                 bot._settings.telegram_chat_id,
                 f"*Documento criado automaticamente:*\n  {desc['title']}\n  {desc['detail']}\n  Documento: {doc_name}{link}",
             )
+            from brazil_module.services.intelligence.notifications import notify_desk
+            notify_desk(
+                title="I8: Document Created",
+                message=f"{tool_name}: {doc_name}",
+                document_type=tool_args.get("doctype", ""),
+                document_name=doc_name,
+            )
         except Exception as e:
             frappe.log_error(str(e), "I8 Document Creation Notification Error")
 
@@ -355,6 +362,9 @@ class Intelligence8Agent:
                             related_docname=result.get("name") if isinstance(result, dict) else None,
                         )
                         self._notify_auto_approved(tool_name, tool_args, result)
+                        if tool_name == "p2p-create_purchase_order":
+                            from brazil_module.services.intelligence.channels.telegram_bot import _update_recurring_expense
+                            _update_recurring_expense(tool_args)
                         return {"tool": tool_name, "status": "executed", "result": result}
                     except Exception as e:
                         frappe.log_error(str(e), f"I8 Learning Auto-Approve Error: {tool_name}")
@@ -388,6 +398,9 @@ class Intelligence8Agent:
                     doc_name = result.get("name") if isinstance(result, dict) else None
                     if doc_name:
                         self._notify_document_created(tool_name, tool_args, doc_name)
+                if tool_name == "p2p-create_purchase_order":
+                    from brazil_module.services.intelligence.channels.telegram_bot import _update_recurring_expense
+                    _update_recurring_expense(tool_args)
                 return {"tool": tool_name, "status": "executed", "result": result}
             except Exception as e:
                 frappe.log_error(str(e), f"I8 Tool Error: {tool_name}")

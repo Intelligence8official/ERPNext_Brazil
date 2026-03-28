@@ -388,5 +388,10 @@ def _send_via_telegram(message: str, reply_markup: dict | None = None) -> None:
         chat_id = frappe.db.get_single_value("I8 Agent Settings", "telegram_chat_id")
         if chat_id:
             bot.send_message(chat_id, message, reply_markup)
+        from brazil_module.services.intelligence.notifications import notify_desk
+        notify_desk(
+            title="Intelligence8 Daily Briefing",
+            message="Daily briefing sent to Telegram. Check your Telegram for details.",
+        )
     except Exception as e:
         frappe.log_error(str(e), "I8 Daily Briefing Error")

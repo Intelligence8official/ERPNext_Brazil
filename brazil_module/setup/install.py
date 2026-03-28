@@ -13,6 +13,7 @@ def after_install():
     create_roles()
     setup_workspace()
     setup_desktop_icons()
+    setup_number_cards()
 
 
 def after_migrate():
@@ -21,6 +22,7 @@ def after_migrate():
     setup_workspace()
     setup_desktop_icons()
     setup_workspace()
+    setup_number_cards()
 
 
 def create_custom_fields():
@@ -620,5 +622,67 @@ def setup_desktop_icons():
         icon.insert(ignore_permissions=True)
     except Exception as e:
         frappe.logger().error(f"Error creating Desktop Icon: {e}")
+
+    frappe.db.commit()
+
+
+def setup_number_cards():
+    """Create Number Cards for the Intelligence8 workspace dashboard."""
+    cards = [
+        {
+            "name": "I8 Today's Decisions",
+            "label": "Decisions Today",
+            "document_type": "I8 Decision Log",
+            "function": "Count",
+            "filters_json": '[]',
+            "dynamic_filters_json": '{"timestamp":[">=","Today"]}',
+            "show_percentage_stats": 1,
+            "stats_time_interval": "Daily",
+            "module": "Intelligence8",
+            "color": "#4299E1",
+        },
+        {
+            "name": "I8 Pending Approvals",
+            "label": "Pending Approvals",
+            "document_type": "I8 Decision Log",
+            "function": "Count",
+            "filters_json": '[["result","=","Pending"],["docstatus","=",0]]',
+            "color": "#ED8936",
+        },
+        {
+            "name": "I8 Today's LLM Cost",
+            "label": "LLM Cost Today (USD)",
+            "document_type": "I8 Cost Log",
+            "function": "Sum",
+            "aggregate_function_based_on": "cost_usd",
+            "dynamic_filters_json": '{"timestamp":[">=","Today"]}',
+            "color": "#48BB78",
+        },
+        {
+            "name": "I8 Unreconciled Transactions",
+            "label": "Unreconciled Bank Txns",
+            "document_type": "Bank Transaction",
+            "function": "Count",
+            "filters_json": '[["docstatus","=",1],["unallocated_amount",">",0]]',
+            "color": "#F56565",
+        },
+    ]
+
+    for card_data in cards:
+        name = card_data.pop("name")
+        if frappe.db.exists("Number Card", name):
+            continue
+
+        nc = frappe.new_doc("Number Card")
+        nc.name = name
+        for key, value in card_data.items():
+            if hasattr(nc, key):
+                setattr(nc, key, value)
+        nc.owner = "Administrator"
+        nc.is_standard = 0
+        try:
+            nc.insert(ignore_permissions=True)
+        except Exception as e:
+            frappe.logger().error(f"Error creating Number Card {name}: {e}")
 
     frappe.db.commit()

@@ -83,6 +83,16 @@ def run_reconciliation(notify_always: bool = False):
                 lines.extend(account_details)
             _notify_telegram("\n".join(lines))
 
+            if total_matched > 0 or notify_always:
+                try:
+                    from brazil_module.services.intelligence.notifications import notify_desk
+                    notify_desk(
+                        title="I8: Bank Reconciliation",
+                        message=f"{total_matched} transactions reconciled, {total_unmatched} pending",
+                    )
+                except Exception:
+                    pass
+
         frappe.db.commit()
 
     except Exception as e:
@@ -214,6 +224,14 @@ def check_urgent_payments():
                 day_label = "HOJE" if str(inv["due_date"]) == today.isoformat() else "AMANHA"
                 lines.append(f"  - {inv['name']}: {supplier} R$ {float(inv['outstanding_amount']):,.2f} ({day_label})")
             _notify_telegram("\n".join(lines))
+            try:
+                from brazil_module.services.intelligence.notifications import notify_desk
+                notify_desk(
+                    title="I8: Urgent Payments",
+                    message=f"{len(urgent)} payments due today/tomorrow totaling R$ {total:,.2f}",
+                )
+            except Exception:
+                pass
     except Exception as e:
         frappe.log_error(str(e), "I8 Planning Loop: Urgent Payment Check Error")
 

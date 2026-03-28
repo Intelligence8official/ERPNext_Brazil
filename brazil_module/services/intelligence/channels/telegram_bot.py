@@ -437,6 +437,19 @@ def execute_approved_action(log_name: str):
             f"{status_msg}: {doctype} {doc_name}{link}",
         )
 
+        # Desk notification
+        from brazil_module.services.intelligence.notifications import notify_desk
+        notify_desk(
+            title=f"I8: {status_msg} {doctype}",
+            message=f"{doctype} {doc_name} was {status_msg.lower()} by Intelligence8",
+            document_type=doctype,
+            document_name=doc_name,
+        )
+
+        # Update Recurring Expense after PO creation
+        if tool_name == "p2p-create_purchase_order" and doc_name:
+            _update_recurring_expense(tool_args)
+
         # Auto-send PO to supplier after creation
         if tool_name == "p2p-create_purchase_order" and doc_name:
             _auto_send_po_to_supplier(bot, doc_name, executor)
@@ -463,6 +476,26 @@ def execute_approved_action(log_name: str):
             )
         except Exception:
             pass
+
+
+def _update_recurring_expense(tool_args: dict) -> None:
+    """Update Recurring Expense last_created and next_due after PO creation."""
+    try:
+        supplier = tool_args.get("supplier")
+        if not supplier:
+            return
+
+        expenses = frappe.get_all(
+            "I8 Recurring Expense",
+            filters={"supplier": supplier, "active": 1},
+            pluck="name",
+        )
+        for exp_name in expenses:
+            doc = frappe.get_doc("I8 Recurring Expense", exp_name)
+            doc.update_after_creation()
+            frappe.logger().info(f"I8 Recurring Expense updated: {exp_name} -> next_due={doc.next_due}")
+    except Exception as e:
+        frappe.log_error(str(e), "I8 Recurring Expense Update Error")
 
 
 def _auto_send_po_to_supplier(bot, po_name: str, executor) -> None:
