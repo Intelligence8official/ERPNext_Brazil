@@ -20,7 +20,8 @@
         "related_docname",
         "cost_usd",
         "human_override",
-        "human_feedback"
+        "human_feedback",
+        "trace_id"
     ],
     "fields": [
         {
@@ -111,12 +112,17 @@
             "fieldname": "human_feedback",
             "fieldtype": "Small Text",
             "label": "Human Feedback"
+        },
+        {
+            "fieldname": "trace_id",
+            "fieldtype": "Data",
+            "label": "Trace ID"
         }
     ],
     "index_web_pages_for_search": 0,
     "is_submittable": 1,
     "links": [],
-    "modified": "2026-03-25 10:00:00.000000",
+    "modified": "2026-03-28 10:00:00.000000",
     "modified_by": "Administrator",
     "module": "Intelligence8",
     "name": "I8 Decision Log",

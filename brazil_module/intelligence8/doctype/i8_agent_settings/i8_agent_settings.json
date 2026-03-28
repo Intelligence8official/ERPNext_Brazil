@@ -58,7 +58,10 @@
         "expense_check_time",
         "column_break_scheduler",
         "followup_check_time",
-        "planning_loop_interval"
+        "planning_loop_interval",
+        "orchestrator_section",
+        "base_system_prompt",
+        "event_routing"
     ],
     "fields": [
         {
@@ -381,12 +384,31 @@
             "fieldtype": "Int",
             "label": "Planning Loop Interval (minutes)",
             "description": "How often the planning loop runs (reconciliation, urgent payments)"
+        },
+        {
+            "fieldname": "orchestrator_section",
+            "fieldtype": "Section Break",
+            "label": "Orchestrator & Prompts"
+        },
+        {
+            "fieldname": "base_system_prompt",
+            "fieldtype": "Code",
+            "label": "Base System Prompt",
+            "options": "text",
+            "description": "Global prompt concatenated before every module's context_prompt. Edit here to change global behavior."
+        },
+        {
+            "fieldname": "event_routing",
+            "fieldtype": "Table",
+            "label": "Event Routing",
+            "options": "I8 Event Routing",
+            "description": "Maps event types to modules. Events not listed here use LLM classification."
         }
     ],
     "index_web_pages_for_search": 0,
     "issingle": 1,
     "links": [],
-    "modified": "2026-03-25 10:00:00.000000",
+    "modified": "2026-03-28 10:00:00.000000",
     "modified_by": "Administrator",
     "module": "Intelligence8",
     "name": "I8 Agent Settings",

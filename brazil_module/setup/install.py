@@ -14,6 +14,7 @@ def after_install():
     setup_workspace()
     setup_desktop_icons()
     setup_number_cards()
+    setup_module_registry()
 
 
 def after_migrate():
@@ -23,6 +24,7 @@ def after_migrate():
     setup_desktop_icons()
     setup_workspace()
     setup_number_cards()
+    setup_module_registry()
 
 
 def create_custom_fields():
@@ -622,6 +624,183 @@ def setup_desktop_icons():
         icon.insert(ignore_permissions=True)
     except Exception as e:
         frappe.logger().error(f"Error creating Desktop Icon: {e}")
+
+    frappe.db.commit()
+
+
+def setup_module_registry():
+    """Create default I8 Module Registry entries and event routing."""
+    import json
+
+    base_prompt = (
+        "You are Intelligence8, an autonomous AI agent that operates ERPNext.\n\n"
+        "## CRITICAL: ALWAYS CALL TOOLS\n"
+        "You MUST call tools for every event. Never just describe what you would do.\n"
+        "The Decision Engine handles approvals automatically after your tool call.\n\n"
+        "## Response Format\n"
+        "Include confidence score before each tool call:\n"
+        "Confidence: 0.XX\n\n"
+        "## Language\n"
+        "Respond in Brazilian Portuguese for human-facing messages.\n"
+    )
+
+    # Set base system prompt if not already set
+    try:
+        current_prompt = frappe.db.get_single_value("I8 Agent Settings", "base_system_prompt")
+        if not current_prompt:
+            frappe.db.set_single_value("I8 Agent Settings", "base_system_prompt", base_prompt)
+    except Exception as e:
+        frappe.logger().error(f"Error setting base system prompt: {e}")
+
+    modules = [
+        {
+            "module_name": "fiscal",
+            "description": "Nota Fiscal processing, NF-e/CT-e/NFS-e management, SEFAZ integration, supplier matching.",
+            "default_model": "sonnet",
+            "escalation_model": "opus",
+            "context_prompt": (
+                "You are the Fiscal module. You handle Nota Fiscal processing:\n"
+                "- Receive and classify NF-e, CT-e, NFS-e documents\n"
+                "- Match NFs to Purchase Orders\n"
+                "- Create Purchase Invoices from NFs\n"
+                "- Follow up on missing NFs with suppliers\n"
+                "- Update NF statuses\n"
+            ),
+            "read_tools": json.dumps([
+                "fiscal-get_nf_details",
+                "fiscal-find_matching_pos",
+                "fiscal-find_recurring_expense",
+                "erp-read_document",
+                "erp-list_documents",
+            ]),
+            "write_tools": json.dumps([
+                "fiscal-create_purchase_invoice",
+                "fiscal-link_nf_to_po",
+                "fiscal-update_nf_status",
+            ]),
+        },
+        {
+            "module_name": "p2p",
+            "description": "Procure-to-Pay: Purchase Orders, recurring expenses, supplier management, PO creation.",
+            "default_model": "sonnet",
+            "escalation_model": "opus",
+            "context_prompt": (
+                "You are the P2P (Procure-to-Pay) module. You handle:\n"
+                "- Creating Purchase Orders from recurring expenses\n"
+                "- Managing supplier relationships\n"
+                "- Sending POs to suppliers\n"
+                "- Tracking due invoices\n"
+            ),
+            "read_tools": json.dumps([
+                "p2p-list_due_invoices",
+                "erp-read_document",
+                "erp-list_documents",
+            ]),
+            "write_tools": json.dumps([
+                "p2p-create_purchase_order",
+                "p2p-send_po_to_supplier",
+            ]),
+        },
+        {
+            "module_name": "banking",
+            "description": "Banco Inter integration: payments, boletos, PIX, reconciliation, bank statements.",
+            "default_model": "sonnet",
+            "escalation_model": "opus",
+            "context_prompt": (
+                "You are the Banking module. You handle:\n"
+                "- Creating and managing payments via Banco Inter\n"
+                "- Boleto and PIX charge management\n"
+                "- Bank statement reconciliation\n"
+                "- Payment scheduling\n"
+            ),
+            "read_tools": json.dumps([
+                "banking-get_balance",
+                "banking-list_transactions",
+                "erp-read_document",
+                "erp-list_documents",
+                "erp-get_account_balance",
+            ]),
+            "write_tools": json.dumps([
+                "banking-create_payment",
+                "banking-reconcile_transaction",
+            ]),
+        },
+        {
+            "module_name": "email",
+            "description": "Email classification, monitoring, and response. Classifies incoming emails by type.",
+            "default_model": "haiku",
+            "escalation_model": "sonnet",
+            "context_prompt": (
+                "You are the Email module. You handle:\n"
+                "- Classifying incoming emails (FISCAL, COMMERCIAL, FINANCIAL, OPERATIONAL, SPAM)\n"
+                "- Searching and reading email content\n"
+                "- Sending notification emails\n"
+            ),
+            "read_tools": json.dumps([
+                "email-classify",
+                "email-search",
+                "email-get_content",
+            ]),
+            "write_tools": json.dumps([
+                "comm-send_email",
+                "comm-send_notification",
+            ]),
+        },
+        {
+            "module_name": "conversational",
+            "description": "General conversation, ERP queries, reports, and ad-hoc requests from humans.",
+            "default_model": "sonnet",
+            "escalation_model": "",
+            "context_prompt": (
+                "You are the Conversational module. You handle:\n"
+                "- Answering user questions about the ERP system\n"
+                "- Running reports and queries\n"
+                "- General-purpose assistance\n"
+                "- Routing to specialized modules when needed\n"
+            ),
+            "read_tools": json.dumps([
+                "erp-read_document",
+                "erp-list_documents",
+                "erp-get_report_data",
+                "erp-get_account_balance",
+            ]),
+            "write_tools": json.dumps([]),
+        },
+    ]
+
+    for mod_data in modules:
+        module_name = mod_data["module_name"]
+        if frappe.db.exists("I8 Module Registry", {"module_name": module_name}):
+            continue
+
+        doc = frappe.new_doc("I8 Module Registry")
+        for key, value in mod_data.items():
+            if hasattr(doc, key):
+                setattr(doc, key, value)
+        doc.enabled = 1
+        try:
+            doc.insert(ignore_permissions=True)
+            frappe.logger().info(f"Created I8 Module Registry: {module_name}")
+        except Exception as e:
+            frappe.logger().error(f"Error creating I8 Module Registry {module_name}: {e}")
+
+    # Event routing entries
+    event_routes = [
+        {"event_type": "nf_received", "module_name": "fiscal"},
+        {"event_type": "classify_email", "module_name": "email"},
+        {"event_type": "recurring_schedule", "module_name": "p2p"},
+        {"event_type": "human_message", "module_name": "conversational"},
+    ]
+
+    try:
+        settings = frappe.get_single("I8 Agent Settings")
+        existing_events = {row.event_type for row in (settings.event_routing or [])}
+        for route in event_routes:
+            if route["event_type"] not in existing_events:
+                settings.append("event_routing", route)
+        settings.save(ignore_permissions=True)
+    except Exception as e:
+        frappe.logger().error(f"Error setting up event routing: {e}")
 
     frappe.db.commit()
 

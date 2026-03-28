@@ -1,3 +1,5 @@
+import json
+
 from brazil_module.services.intelligence.tools import (
     banking_tools,
     communication_tools,
@@ -38,3 +40,28 @@ def execute_tool(tool_name: str, args: dict, executor) -> dict:
     if not mod:
         raise ValueError(f"Unknown tool prefix: {prefix}")
     return mod.execute_tool(tool_name, args, executor)
+
+
+def filter_tools_for_module(module_tools_json: str) -> list:
+    """Filter tool schemas based on module's tool patterns."""
+    patterns = json.loads(module_tools_json or "[]")
+    if not patterns:
+        return get_all_tool_schemas()
+
+    return _filter_by_patterns(get_all_tool_schemas(), patterns)
+
+
+def _filter_by_patterns(schemas: list, patterns: list) -> list:
+    """Filter tool schemas by name patterns (exact or prefix-*)."""
+    filtered = []
+    for schema in schemas:
+        name = schema["name"]
+        for pattern in patterns:
+            if pattern.endswith("*"):
+                if name.startswith(pattern[:-1]):
+                    filtered.append(schema)
+                    break
+            elif name == pattern:
+                filtered.append(schema)
+                break
+    return filtered

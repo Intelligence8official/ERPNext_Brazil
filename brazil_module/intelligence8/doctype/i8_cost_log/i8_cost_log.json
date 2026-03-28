@@ -16,7 +16,8 @@
         "cache_hit",
         "decision_log",
         "company",
-        "department"
+        "department",
+        "trace_id"
     ],
     "fields": [
         {
@@ -87,11 +88,16 @@
             "fieldtype": "Link",
             "label": "Department",
             "options": "Department"
+        },
+        {
+            "fieldname": "trace_id",
+            "fieldtype": "Data",
+            "label": "Trace ID"
         }
     ],
     "index_web_pages_for_search": 0,
     "links": [],
-    "modified": "2026-03-25 10:00:00.000000",
+    "modified": "2026-03-28 10:00:00.000000",
     "modified_by": "Administrator",
     "module": "Intelligence8",
     "name": "I8 Cost Log",

@@ -7,10 +7,15 @@
     "field_order": [
         "module_name",
         "description",
-        "tools_definition",
-        "context_prompt",
         "enabled",
-        "default_model"
+        "column_break",
+        "default_model",
+        "escalation_model",
+        "prompt_section",
+        "context_prompt",
+        "tools_section",
+        "read_tools",
+        "write_tools"
     ],
     "fields": [
         {
@@ -27,23 +32,15 @@
             "label": "Description"
         },
         {
-            "fieldname": "tools_definition",
-            "fieldtype": "Code",
-            "label": "Tools Definition",
-            "options": "JSON"
-        },
-        {
-            "fieldname": "context_prompt",
-            "fieldtype": "Code",
-            "label": "Context Prompt",
-            "options": "text"
-        },
-        {
             "default": "1",
             "fieldname": "enabled",
             "fieldtype": "Check",
             "label": "Enabled",
             "in_list_view": 1
+        },
+        {
+            "fieldname": "column_break",
+            "fieldtype": "Column Break"
         },
         {
             "default": "sonnet",
@@ -52,11 +49,48 @@
             "label": "Default Model",
             "options": "haiku\nsonnet\nopus",
             "in_list_view": 1
+        },
+        {
+            "fieldname": "escalation_model",
+            "fieldtype": "Select",
+            "label": "Escalation Model",
+            "options": "\nhaiku\nsonnet\nopus",
+            "description": "Retry model when first pass is uncertain"
+        },
+        {
+            "fieldname": "prompt_section",
+            "fieldtype": "Section Break",
+            "label": "Prompt"
+        },
+        {
+            "fieldname": "context_prompt",
+            "fieldtype": "Code",
+            "label": "Context Prompt",
+            "options": "text"
+        },
+        {
+            "fieldname": "tools_section",
+            "fieldtype": "Section Break",
+            "label": "Tools"
+        },
+        {
+            "fieldname": "read_tools",
+            "fieldtype": "Code",
+            "label": "Read Tools (JSON)",
+            "options": "JSON",
+            "description": "Auto-approved tools. JSON array of tool names/patterns."
+        },
+        {
+            "fieldname": "write_tools",
+            "fieldtype": "Code",
+            "label": "Write Tools (JSON)",
+            "options": "JSON",
+            "description": "Tools that go through Decision Engine. JSON array."
         }
     ],
     "index_web_pages_for_search": 0,
     "links": [],
-    "modified": "2026-03-25 10:00:00.000000",
+    "modified": "2026-03-28 10:00:00.000000",
     "modified_by": "Administrator",
     "module": "Intelligence8",
     "name": "I8 Module Registry",
@@ -91,5 +125,5 @@
     "sort_field": "modified",
     "sort_order": "DESC",
     "states": [],
-    "track_changes": 0
+    "track_changes": 1
 }

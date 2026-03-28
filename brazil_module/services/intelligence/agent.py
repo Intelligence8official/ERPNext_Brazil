@@ -10,8 +10,9 @@ from brazil_module.services.intelligence.circuit_breaker import CircuitBreaker
 from brazil_module.services.intelligence.context_builder import ContextBuilder
 from brazil_module.services.intelligence.cost_tracker import CostTracker
 from brazil_module.services.intelligence.decision_engine import DecisionEngine
+from brazil_module.services.intelligence.orchestrator import generate_trace_id
 from brazil_module.services.intelligence.prompts.system_prompt import build_system_prompt
-from brazil_module.services.intelligence.tools import execute_tool, get_all_tool_schemas
+from brazil_module.services.intelligence.tools import get_all_tool_schemas, execute_tool
 
 _circuit_breaker = CircuitBreaker()
 
@@ -25,6 +26,22 @@ OPUS_EVENTS = [
 ]
 
 
+def _filter_by_patterns(schemas: list, patterns: list) -> list:
+    """Filter tool schemas by name patterns (exact or prefix-*)."""
+    filtered = []
+    for schema in schemas:
+        name = schema["name"]
+        for pattern in patterns:
+            if pattern.endswith("*"):
+                if name.startswith(pattern[:-1]):
+                    filtered.append(schema)
+                    break
+            elif name == pattern:
+                filtered.append(schema)
+                break
+    return filtered
+
+
 class Intelligence8Agent:
     def __init__(self):
         self.settings = frappe.get_single("I8 Agent Settings")
@@ -35,6 +52,7 @@ class Intelligence8Agent:
         self.decision_engine = DecisionEngine(self.settings)
         self.action_executor = ActionExecutor()
         self.cost_tracker = CostTracker()
+        self._current_read_tools: set = set()
 
     def select_model(self, event_type: str) -> str:
         if event_type in HAIKU_EVENTS:
@@ -61,17 +79,72 @@ class Intelligence8Agent:
             if self.settings.pause_on_budget_exceeded:
                 return {"status": "paused", "reason": "budget_exceeded"}
 
-        model = self.select_model(event_type)
-        context = self.context_builder.build(event_type, event_data)
-        system_prompt = build_system_prompt(self.settings, ["p2p", "fiscal", "banking"])
-        tools = get_all_tool_schemas()
+        # Generate trace_id for this event chain
+        trace_id = generate_trace_id()
 
+        # Route to module(s) via orchestrator
+        from brazil_module.services.intelligence.orchestrator import route_event
+        modules = route_event(event_type, event_data)
+
+        # Execute module pipeline
+        all_results = []
+        accumulated_text = ""
+        for module_name in modules:
+            result = self._process_with_module(
+                module_name, event_type, event_data, trace_id,
+                previous_context=accumulated_text,
+            )
+            all_results.extend(result.get("results", []))
+            accumulated_text += result.get("text", "") + "\n"
+
+        # Send final response
+        final_text = accumulated_text.strip()
+        if final_text:
+            self._send_response(event_data, final_text)
+
+        return {"status": "completed", "results": all_results, "text": final_text}
+
+    def _process_with_module(self, module_name: str, event_type: str, event_data: dict,
+                              trace_id: str, previous_context: str = "") -> dict:
+        """Process an event using a specific module's config."""
+        registry = self._load_module_registry(module_name)
+
+        # Build prompt: base + module
+        base_prompt = self.settings.get("base_system_prompt") or ""
+        module_prompt = registry.get("context_prompt") or "" if registry else ""
+        system_prompt = f"{base_prompt}\n\n{module_prompt}".strip()
+
+        if not system_prompt:
+            # Fallback to hardcoded prompt
+            system_prompt = build_system_prompt(self.settings, [module_name])
+
+        # Filter tools for this module
+        if registry:
+            tools = self._filter_tools_for_module(registry)
+            # Track which tools are read vs write for this module
+            self._current_read_tools = set(self._resolve_tool_patterns(
+                json.loads(registry.get("read_tools") or "[]")
+            ))
+        else:
+            tools = get_all_tool_schemas()
+            self._current_read_tools = set()
+
+        # Select model
+        model = self._resolve_model_for_module(registry, event_type)
+
+        # Build context
+        context = self.context_builder.build(event_type, event_data)
+        user_message = self._build_user_message(event_type, event_data, context)
+        if previous_context:
+            user_message = f"Previous context from other modules:\n{previous_context}\n\n{user_message}"
+
+        # Run agentic loop
+        messages = [{"role": "user", "content": user_message}]
         system = system_prompt + "\n\n" + context.get("module_context", "")
-        messages = [{"role": "user", "content": self._build_user_message(event_type, event_data, context)}]
 
         all_results = []
         text_response = ""
-        max_turns = 5  # prevent infinite loops
+        max_turns = 5
 
         for turn in range(max_turns):
             start = time.monotonic()
@@ -87,7 +160,7 @@ class Intelligence8Agent:
             except Exception as e:
                 _circuit_breaker.record_failure()
                 frappe.log_error(str(e), "Intelligence8 Claude API Error")
-                return {"status": "error", "message": str(e)}
+                return {"status": "error", "message": str(e), "results": [], "text": ""}
 
             latency_ms = int((time.monotonic() - start) * 1000)
             usage = response.usage
@@ -98,14 +171,13 @@ class Intelligence8Agent:
                 tokens_in=usage.input_tokens,
                 tokens_out=usage.output_tokens,
                 latency_ms=latency_ms,
-                module=event_data.get("module", "general"),
+                module=module_name,
                 function_name=event_type,
                 cache_hit=cache_hit,
             )
 
             confidence = self._extract_confidence(response)
 
-            # Collect text and tool calls from this turn
             tool_results_for_next_turn = []
             for block in response.content:
                 if block.type == "text":
@@ -113,7 +185,6 @@ class Intelligence8Agent:
                 elif block.type == "tool_use":
                     result = self._handle_tool_call(block, event_type, event_data, confidence)
                     all_results.append(result)
-                    # Build tool_result for next turn
                     tool_output = json.dumps(result.get("result", {"status": result["status"]}), default=str)
                     tool_results_for_next_turn.append({
                         "type": "tool_result",
@@ -121,25 +192,63 @@ class Intelligence8Agent:
                         "content": tool_output[:4000],
                     })
 
-            # If no tool calls or stop_reason is "end_turn", we're done
             if response.stop_reason != "tool_use" or not tool_results_for_next_turn:
                 break
 
-            # Continue the conversation: add assistant response + tool results
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": tool_results_for_next_turn})
 
-        # Send final text response back to the user's channel
-        if text_response.strip():
-            self._send_response(event_data, text_response.strip())
-
         return {"status": "completed", "results": all_results, "text": text_response}
+
+    def _load_module_registry(self, module_name: str) -> dict | None:
+        """Load module config from I8 Module Registry."""
+        try:
+            registries = frappe.get_all(
+                "I8 Module Registry",
+                filters={"module_name": module_name, "enabled": 1},
+                fields=["name", "context_prompt", "read_tools", "write_tools",
+                         "default_model", "escalation_model", "description"],
+                limit=1,
+            )
+            return registries[0] if registries else None
+        except Exception:
+            return None
+
+    def _filter_tools_for_module(self, registry: dict) -> list:
+        """Filter available tools based on module's read_tools + write_tools."""
+        all_schemas = get_all_tool_schemas()
+        read_patterns = json.loads(registry.get("read_tools") or "[]")
+        write_patterns = json.loads(registry.get("write_tools") or "[]")
+        all_patterns = read_patterns + write_patterns
+
+        if not all_patterns:
+            return all_schemas  # No filtering if not configured
+
+        return _filter_by_patterns(all_schemas, all_patterns)
+
+    def _resolve_tool_patterns(self, patterns: list) -> list:
+        """Resolve tool patterns to actual tool names."""
+        all_schemas = get_all_tool_schemas()
+        matched = _filter_by_patterns(all_schemas, patterns)
+        return [s["name"] for s in matched]
+
+    def _resolve_model_for_module(self, registry: dict | None, event_type: str) -> str:
+        """Get the Claude model to use for this module."""
+        if registry and registry.get("default_model"):
+            model_key = registry["default_model"]
+            model_map = {
+                "haiku": self.settings.haiku_model,
+                "sonnet": self.settings.sonnet_model,
+                "opus": self.settings.opus_model,
+            }
+            return model_map.get(model_key, self.settings.sonnet_model)
+        return self.select_model(event_type)
 
     def _send_response(self, event_data: dict, text: str) -> None:
         """Send agent's text response back to the originating channel."""
         chat_id = event_data.get("chat_id")
         if chat_id:
-            # Came from Telegram — reply there
+            # Came from Telegram -- reply there
             try:
                 from brazil_module.services.intelligence.channels.telegram_bot import TelegramBot
                 bot = TelegramBot()
@@ -346,7 +455,7 @@ class Intelligence8Agent:
         doctype = tool_args.get("doctype", "")
 
         # Check learning patterns for non-safe tools
-        if tool_name not in self.ALWAYS_APPROVE_TOOLS:
+        if tool_name not in self.ALWAYS_APPROVE_TOOLS and tool_name not in self._current_read_tools:
             try:
                 from brazil_module.services.intelligence.learning_engine import check_learned_pattern
                 if check_learned_pattern(tool_name, tool_args):
@@ -372,8 +481,8 @@ class Intelligence8Agent:
             except Exception:
                 pass  # If learning check fails, fall through to normal flow
 
-        # Safe/read-only tools skip the Decision Engine entirely
-        if tool_name in self.ALWAYS_APPROVE_TOOLS:
+        # Auto-approve if tool is in current module's read_tools OR in global safe list
+        if tool_name in self._current_read_tools or tool_name in self.ALWAYS_APPROVE_TOOLS:
             decision = {"auto_approve": True, "confidence": confidence, "threshold": 0}
         else:
             decision = self.decision_engine.evaluate(
@@ -394,7 +503,7 @@ class Intelligence8Agent:
                     related_docname=result.get("name") if isinstance(result, dict) else None,
                 )
                 # Notify Telegram about auto-created documents
-                if tool_name not in self.ALWAYS_APPROVE_TOOLS:
+                if tool_name not in self.ALWAYS_APPROVE_TOOLS and tool_name not in self._current_read_tools:
                     doc_name = result.get("name") if isinstance(result, dict) else None
                     if doc_name:
                         self._notify_document_created(tool_name, tool_args, doc_name)

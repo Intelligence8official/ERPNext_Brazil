@@ -1,3 +1,18 @@
+def get_base_prompt_from_settings() -> str:
+    """Read base system prompt from Agent Settings. Falls back to hardcoded."""
+    try:
+        import frappe
+        prompt = frappe.db.get_single_value("I8 Agent Settings", "base_system_prompt")
+        if prompt and prompt.strip():
+            return prompt.strip()
+    except Exception:
+        pass
+    # Fallback
+    import frappe
+    settings = frappe.get_single("I8 Agent Settings")
+    return build_system_prompt(settings, [])
+
+
 def build_system_prompt(settings, active_modules: list[str]) -> str:
     modules_list = "\n".join(f"- {m}" for m in active_modules) if active_modules else "- (none configured)"
     return f"""You are Intelligence8, an autonomous AI agent that OPERATES ERPNext.
