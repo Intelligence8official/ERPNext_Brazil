@@ -1,6 +1,25 @@
 from datetime import date, timedelta
 
+import anthropic
 import frappe
+
+
+JARVIS_PERSONALITY = """You are J.A.R.V.I.S., the AI financial assistant for Intelligence8.
+Your personality: professional yet warm, subtly witty like the original JARVIS from Iron Man.
+You address the user by their first name. You are their trusted right hand for ERP operations.
+
+Format the daily briefing data below into a natural, conversational Telegram message.
+Rules:
+- Start with a warm greeting using the user's name and mention the day/date in Portuguese
+- Use a natural flow — don't just list items mechanically
+- Highlight what needs attention (overdue payments, pending approvals) with appropriate urgency
+- If everything is fine, be reassuring
+- Add subtle personality — a light observation or encouragement
+- Use Markdown formatting (bold, italic) for Telegram
+- Keep it concise but complete — max 2000 chars
+- Write entirely in Brazilian Portuguese
+- Sign off as "J.A.R.V.I.S." at the end
+"""
 
 
 def scheduled_briefing():
@@ -11,9 +30,13 @@ def scheduled_briefing():
         return
 
     today = date.today()
-    briefing = build_briefing()
+    raw_data = build_briefing()
+    user_name = _get_user_first_name()
     buttons = _build_briefing_buttons(today)
-    _send_via_telegram(briefing, buttons)
+
+    # Use LLM to format the briefing with JARVIS personality
+    formatted = _format_with_jarvis(raw_data, user_name, today)
+    _send_via_telegram(formatted or raw_data, buttons)
 
 
 def build_briefing() -> str:
@@ -380,6 +403,63 @@ def _reconciliation_status_section() -> str:
         return ""
 
 
+def _get_user_first_name() -> str:
+    """Get the first name of the primary Telegram user from I8 Agent Settings."""
+    try:
+        settings = frappe.get_single("I8 Agent Settings")
+        for user_row in (settings.telegram_users or []):
+            if user_row.active and user_row.user:
+                first_name = frappe.db.get_value("User", user_row.user, "first_name")
+                if first_name:
+                    return first_name
+    except Exception:
+        pass
+    return "chefe"
+
+
+def _format_with_jarvis(raw_data: str, user_name: str, today: date) -> str | None:
+    """Use Haiku to format the briefing with JARVIS personality."""
+    try:
+        from brazil_module.intelligence8.doctype.i8_agent_settings.i8_agent_settings import I8AgentSettings
+        settings = I8AgentSettings.get_settings()
+
+        client = anthropic.Anthropic(api_key=I8AgentSettings.get_api_key())
+        response = client.messages.create(
+            model=settings.haiku_model or "claude-haiku-4-5-20251001",
+            max_tokens=2000,
+            system=JARVIS_PERSONALITY,
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"User name: {user_name}\n"
+                    f"Today: {today.strftime('%A, %d de %B de %Y')} "
+                    f"({_weekday_name(today)}, {today.strftime('%d/%m/%Y')})\n\n"
+                    f"Raw briefing data:\n{raw_data}"
+                ),
+            }],
+        )
+
+        formatted = response.content[0].text.strip()
+
+        # Log cost
+        from brazil_module.services.intelligence.cost_tracker import CostTracker
+        tracker = CostTracker()
+        tracker.log(
+            model=settings.haiku_model or "claude-haiku-4-5-20251001",
+            tokens_in=response.usage.input_tokens,
+            tokens_out=response.usage.output_tokens,
+            latency_ms=0,
+            module="briefing",
+            function_name="jarvis_format",
+        )
+
+        return formatted
+
+    except Exception as e:
+        frappe.log_error(str(e), "I8 JARVIS Briefing Format Error")
+        return None
+
+
 def _send_via_telegram(message: str, reply_markup: dict | None = None) -> None:
     """Send the briefing via Telegram."""
     try:
@@ -390,8 +470,8 @@ def _send_via_telegram(message: str, reply_markup: dict | None = None) -> None:
             bot.send_message(chat_id, message, reply_markup)
         from brazil_module.services.intelligence.notifications import notify_desk
         notify_desk(
-            title="Intelligence8 Daily Briefing",
-            message="Daily briefing sent to Telegram. Check your Telegram for details.",
+            title="J.A.R.V.I.S. Daily Briefing",
+            message="Briefing diario enviado ao Telegram por J.A.R.V.I.S.",
         )
     except Exception as e:
         frappe.log_error(str(e), "I8 Daily Briefing Error")
