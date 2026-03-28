@@ -9,10 +9,13 @@
 
 Evolve Intelligence8 from a single-agent architecture to a multi-agent system where:
 
-- An **Orchestrator** classifies events and dispatches to the right specialized agent
-- Each **Module Agent** has its own prompt, tools, and model stored in the database (I8 Module Registry)
+- An **Orchestrator** classifies events and dispatches to the right specialized agent (supports multi-module pipeline for complex requests)
+- Each **Module Agent** has its own prompt, read/write tools, and model stored in the database (I8 Module Registry)
 - A **base system prompt** in Agent Settings defines global rules (language, confidence format, etc.)
 - Adding a new agent = creating a new I8 Module Registry record in ERPNext (no deploy needed)
+- Full **trace_id** propagation from event → orchestrator → module → tool calls for observability
+- **Prompt versioning** via Frappe native `track_changes` (automatic history on every save)
+- **Escalation model** per module for uncertain/complex scenarios
 
 ---
 
@@ -36,12 +39,35 @@ Two-tier routing:
 
 ```
 route_event(event_type, event_data):
-    1. Check I8 Event Routing for event_type → module_name
-    2. If found and module is enabled → return module_name
+    1. If event_type == "approved_action":
+       → Read Decision Log → get original module from log.module field
+       → Re-dispatch to that module
+    2. Check I8 Event Routing for event_type → module_name
+       → If found and module is enabled → return [module_name]
     3. If not found → call Haiku with list of enabled modules + descriptions
-    4. Haiku returns the best module_name
-    5. If Haiku fails → fallback to "conversational" module
+       → Haiku returns ordered list of modules (e.g., ["fiscal", "p2p"])
+       → For ambiguous requests like "mostra NFs e agenda pagamento"
+    4. If Haiku fails → fallback to ["conversational"]
 ```
+
+### Multi-Module Pipeline
+
+When the orchestrator returns multiple modules (e.g., ["fiscal", "p2p"]):
+1. Execute first module, collect results
+2. Pass results as additional context to second module
+3. Aggregate all results and text responses
+4. Send unified response to user
+
+This handles requests like "mostra as NFs pendentes e agenda o pagamento" that span fiscal + p2p.
+
+### Trace ID
+
+A `trace_id` (UUID) is generated at the start of every event and propagated to:
+- I8 Decision Log (new field `trace_id`)
+- I8 Cost Log (new field `trace_id`)
+- I8 Conversation Message (new field `trace_id`)
+
+This connects: event arrival → orchestrator decision → module execution → tool calls → response. Essential for debugging in production.
 
 ---
 
@@ -52,42 +78,76 @@ route_event(event_type, event_data):
 | `base_system_prompt` | Code (text) | Global system prompt with rules, language, confidence format. Concatenated before every module's context_prompt. |
 | `event_routing` | Table(I8 Event Routing) | Configurable event_type → module_name mapping |
 
+### New field on I8 Decision Log and I8 Cost Log
+
+| Field | Type | Description |
+|---|---|---|
+| `trace_id` | Data | UUID propagated from event start through the entire processing chain |
+| `module` | Data | Module that processed this event (already exists on Decision Log) |
+
 ---
 
-## 4. Module Agent Execution
+## 4. I8 Module Registry — Updated Fields
+
+| Campo | Tipo | Uso |
+|---|---|---|
+| `module_name` | Data | Identifier: "p2p", "fiscal", "email", "conversational" |
+| `description` | Small Text | Used by orchestrator LLM to choose module |
+| `context_prompt` | Code (text) | Module-specific system prompt (editable in ERPNext) |
+| `read_tools` | Code (JSON) | JSON array of read-only tool patterns (auto-approved) |
+| `write_tools` | Code (JSON) | JSON array of write tool patterns (go through Decision Engine) |
+| `default_model` | Select | Primary model: haiku, sonnet, opus |
+| `escalation_model` | Select | Retry model when UNCERTAIN/low confidence. Blank = no escalation. |
+| `enabled` | Check | Enable/disable module |
+
+**Security:** Read tools are always auto-approved (no Decision Engine). Write tools go through the existing Decision Engine (confidence threshold, learning loop, approval flow). The conversational module should have NO write_tools.
+
+**Prompt versioning:** Module Registry has `track_changes = 1`. Every save creates a Frappe Version record. History viewable via "View > Version" in the document.
+
+**Escalation:** When the module's first LLM call returns no tool calls or all confidence < 0.3, the orchestrator retries with `escalation_model`. Example: email classification Haiku returns UNCERTAIN → retry with Sonnet.
+
+---
+
+## 5. Module Agent Execution
 
 Each module agent:
 
 1. Reads `base_system_prompt` from Agent Settings (global rules)
 2. Reads `context_prompt` from I8 Module Registry (module-specific instructions)
 3. Concatenates: `base_prompt + "\n\n" + module_prompt`
-4. Filters tools: only tools listed in `tools_definition` JSON field
+4. Combines `read_tools + write_tools` and filters available tools
 5. Calls Claude API with the module's `default_model`
 6. Runs agentic loop (existing, up to 5 turns)
+7. If no tool calls and escalation_model is set → retry with escalation model
 
 ### Tool Filtering
 
-`tools_definition` in I8 Module Registry stores a JSON array of tool name prefixes or exact names:
+`read_tools` and `write_tools` store JSON arrays of tool name patterns:
 
 ```json
-["p2p-*", "erp-read_document", "erp-list_documents"]
+// read_tools
+["erp-read_document", "erp-list_documents", "erp-get_report_data"]
+
+// write_tools
+["p2p-create_purchase_order", "p2p-send_po_to_supplier"]
 ```
 
-The system matches tool names against these patterns. `*` suffix means all tools with that prefix.
+Pattern matching: exact name or prefix with `*` (e.g., `"p2p-*"` matches all p2p tools).
+
+In `_handle_tool_call`: if the tool is in `read_tools` → auto-approve (ALWAYS_APPROVE). If in `write_tools` → Decision Engine evaluates.
 
 ---
 
-## 5. Initial Module Seed Data
+## 6. Initial Module Seed Data
 
 ### 5a: P2P Module
 
 - **module_name:** p2p
 - **description:** Manages procurement: creates Purchase Orders, schedules payments, sends POs to suppliers, tracks due invoices.
 - **default_model:** sonnet
-- **tools_definition:**
-```json
-["p2p-*", "erp-read_document", "erp-list_documents", "erp-get_report_data"]
-```
+- **read_tools:** `["erp-read_document", "erp-list_documents", "erp-get_report_data", "p2p-list_due_invoices"]`
+- **write_tools:** `["p2p-create_purchase_order", "p2p-send_po_to_supplier"]`
+- **escalation_model:** opus
 - **context_prompt:**
 ```
 You are the P2P (Procure-to-Pay) agent for Intelligence8.
@@ -113,10 +173,9 @@ Confidence: 0.XX
 - **module_name:** fiscal
 - **description:** Processes Notas Fiscais: matches to POs, creates Purchase Invoices, manages NF status.
 - **default_model:** sonnet
-- **tools_definition:**
-```json
-["fiscal-*", "p2p-create_purchase_order", "erp-read_document", "erp-list_documents"]
-```
+- **read_tools:** `["fiscal-get_nf_details", "fiscal-find_matching_pos", "fiscal-find_recurring_expense", "erp-read_document", "erp-list_documents"]`
+- **write_tools:** `["fiscal-create_purchase_invoice", "fiscal-link_nf_to_po", "fiscal-update_nf_status", "p2p-create_purchase_order"]`
+- **escalation_model:** opus
 - **context_prompt:**
 ```
 You are the Fiscal agent for Intelligence8.
@@ -146,10 +205,9 @@ Confidence: 0.XX
 - **module_name:** email
 - **description:** Classifies incoming emails into categories: FISCAL, COMMERCIAL, FINANCIAL, OPERATIONAL, SPAM, UNCERTAIN.
 - **default_model:** haiku
-- **tools_definition:**
-```json
-["email-*"]
-```
+- **read_tools:** `["email-get_content", "email-search"]`
+- **write_tools:** `["email-classify"]`
+- **escalation_model:** sonnet
 - **context_prompt:**
 ```
 You are the Email Classification agent for Intelligence8.
@@ -178,10 +236,9 @@ Confidence: 0.95
 - **module_name:** banking
 - **description:** Manages banking operations: reconciles transactions, checks balances, monitors payment status.
 - **default_model:** sonnet
-- **tools_definition:**
-```json
-["banking-*", "erp-read_document", "erp-list_documents", "erp-get_account_balance"]
-```
+- **read_tools:** `["banking-get_balance", "banking-reconcile_transactions", "erp-read_document", "erp-list_documents", "erp-get_account_balance"]`
+- **write_tools:** `["banking-create_payment"]`
+- **escalation_model:** (blank)
 - **context_prompt:**
 ```
 You are the Banking agent for Intelligence8.
@@ -201,10 +258,9 @@ Confidence: 0.XX
 - **module_name:** conversational
 - **description:** Answers user questions about the ERP: financial reports, expense summaries, supplier info, pending actions.
 - **default_model:** sonnet
-- **tools_definition:**
-```json
-["erp-*", "banking-get_balance", "p2p-list_due_invoices", "fiscal-get_nf_details"]
-```
+- **read_tools:** `["erp-read_document", "erp-list_documents", "erp-get_report_data", "erp-get_account_balance", "banking-get_balance", "p2p-list_due_invoices", "fiscal-get_nf_details"]`
+- **write_tools:** `[]` (read-only — no write access)
+- **escalation_model:** opus
 - **context_prompt:**
 ```
 You are the Conversational agent for Intelligence8.
@@ -228,7 +284,7 @@ Answer the user's questions about the ERP system. Use tools to fetch data and pr
 
 ---
 
-## 6. Event Routing Seed Data
+## 7. Event Routing Seed Data
 
 | event_type | module_name |
 |---|---|
@@ -241,7 +297,7 @@ Answer the user's questions about the ERP system. Use tools to fetch data and pr
 
 ---
 
-## 7. Code Changes
+## 8. Code Changes
 
 ### 7a: agent.py — Refactor to use Orchestrator
 
@@ -304,7 +360,7 @@ If no I8 Module Registry records exist or module is not found:
 
 ---
 
-## 8. What Stays Unchanged
+## 9. What Stays Unchanged
 
 - `context_builder.py` — already works, enriches event context
 - `decision_engine.py` — unchanged, evaluates confidence per tool call
