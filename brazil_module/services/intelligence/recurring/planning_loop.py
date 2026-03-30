@@ -132,19 +132,31 @@ def run_reconciliation(notify_always: bool = False):
 
 
 def check_overdue_payments():
-    """Alert via Telegram if there are invoices overdue today."""
+    """Alert via Telegram if there are invoices overdue today WITHOUT any payment.
+
+    Excludes invoices that already have a Payment Entry (any status: draft, submitted).
+    Also excludes invoices that have an Inter Payment Order.
+    """
     try:
         today = date.today()
-        newly_overdue = frappe.get_all(
-            "Purchase Invoice",
-            filters={
-                "docstatus": 1,
-                "outstanding_amount": [">", 0],
-                "due_date": today.isoformat(),
-            },
-            fields=["name", "supplier_name", "outstanding_amount"],
-            limit=10,
-        )
+        newly_overdue = frappe.db.sql("""
+            SELECT pi.name, pi.supplier_name, pi.outstanding_amount
+            FROM `tabPurchase Invoice` pi
+            WHERE pi.docstatus = 1
+            AND pi.outstanding_amount > 0
+            AND pi.due_date = %s
+            AND NOT EXISTS (
+                SELECT 1 FROM `tabPayment Entry Reference` per
+                JOIN `tabPayment Entry` pe ON pe.name = per.parent
+                WHERE per.reference_name = pi.name
+                AND pe.docstatus < 2
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM `tabInter Payment Order` ipo
+                WHERE ipo.purchase_invoice = pi.name
+                AND ipo.docstatus < 2
+            )
+        """, today.isoformat(), as_dict=True)
 
         if newly_overdue:
             total = sum(float(inv.get("outstanding_amount") or 0) for inv in newly_overdue)
@@ -228,7 +240,10 @@ def process_pending_nfs():
 
 
 def check_urgent_payments():
-    """Alert via Telegram if there are invoices due today or tomorrow without payment scheduled."""
+    """Alert via Telegram if there are invoices due today or tomorrow without payment scheduled.
+
+    Excludes invoices that already have Payment Entry or Inter Payment Order.
+    """
     try:
         today = date.today()
         tomorrow = today + timedelta(days=1)
@@ -244,6 +259,11 @@ def check_urgent_payments():
                 JOIN `tabPayment Entry` pe ON pe.name = per.parent
                 WHERE per.reference_name = pi.name
                 AND pe.docstatus < 2
+            )
+            AND NOT EXISTS (
+                SELECT 1 FROM `tabInter Payment Order` ipo
+                WHERE ipo.purchase_invoice = pi.name
+                AND ipo.docstatus < 2
             )
         """, (today.isoformat(), tomorrow.isoformat()), as_dict=True)
 
@@ -279,17 +299,26 @@ def schedule_weekly_payments():
     days_until_sunday = 6 - today.weekday()
     week_end = today + timedelta(days=days_until_sunday)
 
-    # Find outstanding PIs due this week
-    invoices = frappe.get_all(
-        "Purchase Invoice",
-        filters={
-            "docstatus": 1,
-            "outstanding_amount": [">", 0],
-            "due_date": ["between", [today.isoformat(), week_end.isoformat()]],
-        },
-        fields=["name", "supplier", "supplier_name", "outstanding_amount", "due_date"],
-        order_by="due_date asc",
-    )
+    # Find outstanding PIs due this week WITHOUT existing payment
+    invoices = frappe.db.sql("""
+        SELECT pi.name, pi.supplier, pi.supplier_name, pi.outstanding_amount, pi.due_date
+        FROM `tabPurchase Invoice` pi
+        WHERE pi.docstatus = 1
+        AND pi.outstanding_amount > 0
+        AND pi.due_date BETWEEN %s AND %s
+        AND NOT EXISTS (
+            SELECT 1 FROM `tabPayment Entry Reference` per
+            JOIN `tabPayment Entry` pe ON pe.name = per.parent
+            WHERE per.reference_name = pi.name
+            AND pe.docstatus < 2
+        )
+        AND NOT EXISTS (
+            SELECT 1 FROM `tabInter Payment Order` ipo
+            WHERE ipo.purchase_invoice = pi.name
+            AND ipo.docstatus < 2
+        )
+        ORDER BY pi.due_date ASC
+    """, (today.isoformat(), week_end.isoformat()), as_dict=True)
 
     if not invoices:
         return
