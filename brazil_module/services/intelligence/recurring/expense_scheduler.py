@@ -21,6 +21,10 @@ def daily_check():
 
     for expense in expenses:
         if _is_due(expense, today):
+            # Advance schedule BEFORE enqueuing to prevent duplicate triggers
+            # on subsequent daily_check runs while PO is pending approval.
+            _advance_schedule(expense["name"])
+
             frappe.enqueue(
                 "brazil_module.services.intelligence.agent.process_single_event",
                 queue="long",
@@ -38,6 +42,16 @@ def daily_check():
                 },
                 deduplicate=True,
             )
+
+
+def _advance_schedule(expense_name: str) -> None:
+    """Advance last_created and next_due immediately to prevent re-triggering."""
+    try:
+        doc = frappe.get_doc("I8 Recurring Expense", expense_name)
+        doc.update_after_creation()
+        frappe.db.commit()
+    except Exception as e:
+        frappe.log_error(str(e), f"I8 Recurring Expense Advance Error: {expense_name}")
 
 
 def _is_due(expense: dict, today: date) -> bool:

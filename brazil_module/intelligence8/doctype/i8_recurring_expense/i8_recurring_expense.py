@@ -75,9 +75,21 @@ class I8RecurringExpense(Document):
         return after_date
 
     def update_after_creation(self):
-        """Called after the agent creates a document for this expense."""
-        self.last_created = date.today()
-        self.next_due = self._calculate_next_due(date.today())
+        """Called after the agent creates a document for this expense.
+
+        Idempotent: if already advanced for the current period (last_created
+        is in the same month/year as today for Monthly, same week for Weekly,
+        etc.), this is a no-op to avoid double-advancing the schedule.
+        """
+        today = date.today()
+
+        if self.last_created:
+            lc = date.fromisoformat(str(self.last_created)) if isinstance(self.last_created, str) else self.last_created
+            if lc.year == today.year and lc.month == today.month:
+                return
+
+        self.last_created = today
+        self.next_due = self._calculate_next_due(today)
         if self.end_date and self.next_due > date.fromisoformat(str(self.end_date)):
             self.active = 0
         self.save(ignore_permissions=True)

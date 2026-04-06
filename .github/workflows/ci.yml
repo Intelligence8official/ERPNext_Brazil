@@ -27,7 +27,7 @@ jobs:
           pip install pytest ruff
 
       - name: Lint with ruff
-        run: ruff check brazil/
+        run: ruff check brazil_module/
 
       - name: Run tests
-        run: python -m pytest brazil/brazil/tests/ -v --tb=short
+        run: python -m pytest brazil_module/tests/ -v --tb=short
