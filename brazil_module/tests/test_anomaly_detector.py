@@ -9,8 +9,17 @@ if "frappe" not in sys.modules or not isinstance(sys.modules["frappe"], MagicMoc
     sys.modules["frappe.utils"] = _fm.utils
 
 frappe = sys.modules["frappe"]
-sys.modules.setdefault("brazil_module.services.intelligence.recurring.planning_loop", MagicMock())
-sys.modules.setdefault("brazil_module.services.intelligence.notifications", MagicMock())
+
+# Temporarily inject mocks for transitive imports, then restore afterwards
+# so other test files that import these modules get the real ones.
+_temp_deps = {
+    "brazil_module.services.intelligence.recurring.planning_loop": None,
+    "brazil_module.services.intelligence.notifications": None,
+}
+for _dep in _temp_deps:
+    _temp_deps[_dep] = sys.modules.get(_dep)
+    if _dep not in sys.modules:
+        sys.modules[_dep] = MagicMock()
 
 import unittest
 
@@ -23,6 +32,13 @@ from brazil_module.services.intelligence.analytics.anomaly_detector import (
     _check_unexpected_charges,
     _notify_anomalies,
 )
+
+# Restore original modules so later test files get the real ones
+for _dep, _orig in _temp_deps.items():
+    if _orig is None:
+        sys.modules.pop(_dep, None)
+    else:
+        sys.modules[_dep] = _orig
 
 
 class TestNfPoMismatch(unittest.TestCase):

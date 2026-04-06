@@ -45,10 +45,32 @@ for _mod_key, (_was_present, _original) in _temp_mocks.items():
         sys.modules[_mod_key] = _original
 
 
+import brazil_module.services.intelligence.recurring.planning_loop as _pl_mod
+
+
 class TestHourlyCheck(unittest.TestCase):
     def setUp(self):
         frappe.reset_mock()
         frappe.db.get_single_value.side_effect = None
+        frappe.db.get_single_value.return_value = None
+        frappe.get_all.side_effect = None
+        frappe.get_all.return_value = []
+        frappe.db.sql.side_effect = None
+        frappe.db.sql.return_value = []
+        frappe.cache.get_value.side_effect = None
+        frappe.cache.get_value.return_value = True  # skip daily checks
+        frappe.log_error.side_effect = None
+        # Ensure module-level frappe reference matches
+        _pl_mod.frappe = frappe
+        # Inject telegram mock for _notify_telegram
+        sys.modules["brazil_module.services.intelligence.channels.telegram_bot"] = _tb_mock
+        # Inject reconciliation mock so the dynamic import succeeds
+        sys.modules["brazil_module.services.banking.reconciliation"] = _rec_mock
+        _rec_mock.batch_reconcile = MagicMock(return_value={"matched": 0, "errors": 0, "unmatched": 0})
+
+    def tearDown(self):
+        sys.modules.pop("brazil_module.services.intelligence.channels.telegram_bot", None)
+        sys.modules.pop("brazil_module.services.banking.reconciliation", None)
 
     def test_skips_when_disabled(self):
         frappe.db.get_single_value.return_value = False
@@ -66,8 +88,13 @@ class TestHourlyCheck(unittest.TestCase):
 class TestRunReconciliation(unittest.TestCase):
     def setUp(self):
         frappe.reset_mock()
+        frappe.get_all.side_effect = None
         frappe.get_all.return_value = []
+        frappe.db.get_single_value.side_effect = None
         frappe.db.get_single_value.return_value = "chat-123"
+        frappe.db.commit.side_effect = None
+        frappe.log_error.side_effect = None
+        _pl_mod.frappe = frappe
         # Ensure telegram_bot mock is available for _notify_telegram
         sys.modules["brazil_module.services.intelligence.channels.telegram_bot"] = _tb_mock
 
@@ -93,7 +120,12 @@ class TestRunReconciliation(unittest.TestCase):
 class TestCheckOverduePayments(unittest.TestCase):
     def setUp(self):
         frappe.reset_mock()
+        frappe.db.get_single_value.side_effect = None
         frappe.db.get_single_value.return_value = "chat-123"
+        frappe.db.sql.side_effect = None
+        frappe.db.sql.return_value = []
+        frappe.log_error.side_effect = None
+        _pl_mod.frappe = frappe
         sys.modules["brazil_module.services.intelligence.channels.telegram_bot"] = _tb_mock
 
     def tearDown(self):
@@ -115,8 +147,15 @@ class TestCheckOverduePayments(unittest.TestCase):
 class TestProcessPendingNfs(unittest.TestCase):
     def setUp(self):
         frappe.reset_mock()
+        frappe.db.get_single_value.side_effect = None
         frappe.db.get_single_value.return_value = "chat-123"
+        frappe.get_all.side_effect = None
+        frappe.get_all.return_value = []
+        frappe.get_doc.side_effect = None
         frappe.enqueue.side_effect = None
+        frappe.db.commit.side_effect = None
+        frappe.log_error.side_effect = None
+        _pl_mod.frappe = frappe
         sys.modules["brazil_module.services.intelligence.channels.telegram_bot"] = _tb_mock
 
     def tearDown(self):

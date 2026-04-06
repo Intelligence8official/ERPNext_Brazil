@@ -14,21 +14,25 @@ from brazil_module.utils.qrcode_gen import generate_qrcode_for_doc
 
 
 class TestGenerateQrcodeForDoc(unittest.TestCase):
-    def test_no_pix_payload_returns_none(self):
+    def _make_doc(self, pix_value):
+        """Create a mock doc where .get() returns values like a Frappe Document."""
         doc = MagicMock()
-        doc.pix_copia_cola = ""
+        attrs = {"pix_copia_cola": pix_value}
+        doc.get.side_effect = lambda key, default=None: attrs.get(key, default)
+        return doc
+
+    def test_no_pix_payload_returns_none(self):
+        doc = self._make_doc("")
         result = generate_qrcode_for_doc(doc)
         self.assertIsNone(result)
 
     def test_none_pix_payload_returns_none(self):
-        doc = MagicMock()
-        doc.pix_copia_cola = None
+        doc = self._make_doc(None)
         result = generate_qrcode_for_doc(doc)
         self.assertIsNone(result)
 
     def test_falsy_pix_payload_returns_none(self):
-        doc = MagicMock()
-        doc.pix_copia_cola = 0
+        doc = self._make_doc(0)
         result = generate_qrcode_for_doc(doc)
         self.assertIsNone(result)
 
