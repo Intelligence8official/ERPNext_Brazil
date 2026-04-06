@@ -9,6 +9,7 @@ Handles:
 - Sending messages and approval requests through the Telegram Bot API
 """
 import json
+import re
 from datetime import date
 
 import requests
@@ -358,17 +359,18 @@ class TelegramBot:
     ) -> dict:
         """POST a sendMessage request to the Telegram Bot API."""
         url = f"{TELEGRAM_API.format(token=self._token)}/sendMessage"
+        html_text = _md_to_telegram_html(text)
         # Telegram max message length is 4096 chars
-        truncated = text[:4090] + "..." if len(text) > 4096 else text
-        payload: dict = {"chat_id": chat_id, "text": truncated, "parse_mode": "Markdown"}
+        truncated = html_text[:4090] + "..." if len(html_text) > 4096 else html_text
+        payload: dict = {"chat_id": chat_id, "text": truncated, "parse_mode": "HTML"}
         if reply_markup is not None:
             payload["reply_markup"] = json.dumps(reply_markup)
         resp = requests.post(url, json=payload, timeout=10)
         result = resp.json()
-        # Fallback: if Markdown fails, retry without parse_mode
+        # Fallback: if HTML fails, retry with plain text (strip tags)
         if not result.get("ok"):
-            payload["parse_mode"] = ""
-            del payload["parse_mode"]
+            payload["text"] = re.sub(r"<[^>]+>", "", truncated)
+            payload.pop("parse_mode", None)
             resp = requests.post(url, json=payload, timeout=10)
             result = resp.json()
         return result
@@ -401,6 +403,117 @@ class TelegramBot:
             return float(data.get("amount", 0))
         except (ValueError, TypeError, json.JSONDecodeError):
             return 0.0
+
+
+def _md_to_telegram_html(text: str) -> str:
+    """Convert Markdown output from LLM to Telegram-compatible HTML.
+
+    Telegram HTML supports: <b>, <i>, <u>, <s>, <code>, <pre>, <a>.
+    It does NOT support tables, headings, or horizontal rules.
+    """
+    lines = text.split("\n")
+    out: list[str] = []
+    in_table = False
+    table_rows: list[list[str]] = []
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Skip horizontal rules
+        if re.match(r"^-{3,}$", stripped):
+            continue
+
+        # Detect table rows
+        if "|" in stripped and stripped.startswith("|"):
+            cells = [c.strip() for c in stripped.strip("|").split("|")]
+            # Skip separator rows (|---|---|)
+            if all(re.match(r"^-+$", c) for c in cells):
+                continue
+            table_rows.append(cells)
+            in_table = True
+            continue
+
+        # Flush accumulated table
+        if in_table:
+            out.append(_render_table_html(table_rows))
+            table_rows = []
+            in_table = False
+
+        # Headings: ## text -> bold
+        heading = re.match(r"^#{1,4}\s+(.+)$", stripped)
+        if heading:
+            out.append(f"\n<b>{_escape_html(heading.group(1))}</b>")
+            continue
+
+        # Blockquotes: > text -> italic
+        bq = re.match(r"^>\s*(.+)$", stripped)
+        if bq:
+            out.append(f"<i>{_escape_html(bq.group(1))}</i>")
+            continue
+
+        # Convert inline markdown
+        converted = _convert_inline_md(stripped)
+        out.append(converted)
+
+    # Flush any remaining table
+    if table_rows:
+        out.append(_render_table_html(table_rows))
+
+    result = "\n".join(out)
+    # Collapse multiple blank lines
+    result = re.sub(r"\n{3,}", "\n\n", result)
+    return result.strip()
+
+
+def _render_table_html(rows: list[list[str]]) -> str:
+    """Render table rows as aligned text lines with HTML formatting."""
+    if not rows:
+        return ""
+
+    lines = []
+    # First row as header (bold)
+    if rows:
+        header = rows[0]
+        # Skip header if it's just empty cells or generic labels like "Item", "Valor"
+        has_content = any(c for c in header if c and not re.match(r"^-+$", c))
+        start = 1 if has_content and len(rows) > 1 else 0
+        if has_content and len(rows) > 1:
+            lines.append("<b>" + "  |  ".join(_escape_html(c) for c in header) + "</b>")
+
+        for row in rows[start:]:
+            cells = [_escape_html(c) for c in row]
+            lines.append("  |  ".join(cells))
+
+    return "\n".join(lines)
+
+
+def _convert_inline_md(text: str) -> str:
+    """Convert inline Markdown formatting to Telegram HTML."""
+    # Escape HTML special chars first (but preserve our tags later)
+    text = _escape_html(text)
+
+    # Bold: **text** or __text__
+    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+    text = re.sub(r"__(.+?)__", r"<b>\1</b>", text)
+
+    # Italic: *text* or _text_ (but not inside words like file_name)
+    text = re.sub(r"(?<!\w)\*([^*]+?)\*(?!\w)", r"<i>\1</i>", text)
+
+    # Inline code: `text`
+    text = re.sub(r"`([^`]+?)`", r"<code>\1</code>", text)
+
+    # Strikethrough: ~~text~~
+    text = re.sub(r"~~(.+?)~~", r"<s>\1</s>", text)
+
+    # Links: [text](url)
+    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', text)
+
+    return text
+
+
+def _escape_html(text: str) -> str:
+    """Escape HTML special characters for Telegram."""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def execute_approved_action(log_name: str):
