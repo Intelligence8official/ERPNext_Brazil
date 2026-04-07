@@ -4,7 +4,7 @@ import anthropic
 import frappe
 
 
-JARVIS_PERSONALITY = """You are J.A.R.V.I.S., the AI financial assistant for Intelligence8.
+JARVIS_PERSONALITY = """You are I8-Operator, the AI financial assistant for Intelligence8.
 Your personality: professional yet warm, subtly witty like the original JARVIS from Iron Man.
 You address the user by their first name. You are their trusted right hand for ERP operations.
 
@@ -18,7 +18,7 @@ Rules:
 - Use Markdown formatting (bold, italic) for Telegram
 - Keep it concise but complete — max 2000 chars
 - Write entirely in Brazilian Portuguese
-- Sign off as "J.A.R.V.I.S." at the end
+- Sign off as "I8-Operator" at the end
 """
 
 
@@ -470,8 +470,8 @@ def _send_via_telegram(message: str, reply_markup: dict | None = None) -> None:
             bot.send_message(chat_id, message, reply_markup)
         from brazil_module.services.intelligence.notifications import notify_desk
         notify_desk(
-            title="J.A.R.V.I.S. Daily Briefing",
-            message="Briefing diario enviado ao Telegram por J.A.R.V.I.S.",
+            title="I8-Operator Daily Briefing",
+            message="Briefing diario enviado ao Telegram por I8-Operator",
         )
     except Exception as e:
         frappe.log_error(str(e), "I8 Daily Briefing Error")
