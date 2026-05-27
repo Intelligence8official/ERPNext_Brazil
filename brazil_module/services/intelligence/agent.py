@@ -469,6 +469,9 @@ class Intelligence8Agent:
                 if check_learned_pattern(tool_name, tool_args):
                     try:
                         result = execute_tool(tool_name, tool_args, self.action_executor)
+                        # Commit document creation before subsequent ops that may rollback
+                        if isinstance(result, dict) and result.get("name"):
+                            frappe.db.commit()
                         self.decision_engine.log_decision(
                             event_type=event_type, module=event_data.get("module", ""),
                             action=tool_name, actor="Agent", channel="system",
@@ -501,6 +504,9 @@ class Intelligence8Agent:
         if decision["auto_approve"]:
             try:
                 result = execute_tool(tool_name, tool_args, self.action_executor)
+                # Commit document creation before subsequent ops that may rollback
+                if isinstance(result, dict) and result.get("name"):
+                    frappe.db.commit()
                 self.decision_engine.log_decision(
                     event_type=event_type, module=event_data.get("module", ""),
                     action=tool_name, actor="Agent", channel="system",

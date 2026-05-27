@@ -537,6 +537,12 @@ def execute_approved_action(log_name: str):
         doc_name = result.get("name", "") if isinstance(result, dict) else ""
         doctype = result.get("doctype", "") if isinstance(result, dict) else ""
 
+        # Commit immediately after document creation so that subsequent
+        # operations (which may call frappe.log_error → db.rollback on failure)
+        # do not undo the INSERT.
+        if doc_name:
+            frappe.db.commit()
+
         # Auto-submit: check recurring expense setting first, then global setting
         submitted = _auto_submit_if_enabled(executor, doctype, doc_name, tool_args)
         status_msg = "Criado e Submetido" if submitted else "Criado (Draft)"
@@ -569,15 +575,18 @@ def execute_approved_action(log_name: str):
             # Clean up any pending send_po decisions with placeholder names
             _cleanup_placeholder_decisions()
 
-        # Log to conversation
-        from brazil_module.services.intelligence.channels.channel_router import ChannelRouter
-        router = ChannelRouter()
-        router.route_message(
-            channel="system", direction="outgoing", actor="agent",
-            content=f"Executed: {tool_name} -> {doctype} {doc_name} ({status_msg})",
-            related_doctype=doctype,
-            related_docname=doc_name,
-        )
+        # Log to conversation (non-critical — don't let it break the flow)
+        try:
+            from brazil_module.services.intelligence.channels.channel_router import ChannelRouter
+            router = ChannelRouter()
+            router.route_message(
+                channel="system", direction="outgoing", actor="agent",
+                content=f"Executed: {tool_name} -> {doctype} {doc_name} ({status_msg})",
+                related_doctype=doctype,
+                related_docname=doc_name,
+            )
+        except Exception as conv_err:
+            frappe.logger().warning(f"I8 Conversation log failed: {conv_err}")
         frappe.db.commit()
     except Exception as e:
         frappe.log_error(str(e), f"I8 Approved Action Error: {tool_name}")
