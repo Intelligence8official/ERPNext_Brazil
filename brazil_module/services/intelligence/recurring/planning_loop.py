@@ -288,11 +288,24 @@ def check_urgent_payments():
 
 
 def schedule_weekly_payments():
-    """Schedule payments for invoices due this week. Runs on configured day."""
+    """Schedule payments for invoices due this week. Runs on configured day.
+
+    Uses a cache-based lock to prevent concurrent execution from cron + manual trigger.
+    """
     if not frappe.db.get_single_value("I8 Agent Settings", "enabled"):
         return
     if not frappe.db.get_single_value("I8 Agent Settings", "auto_schedule_payments"):
         return
+
+    # Prevent concurrent/duplicate execution (lock for 30 minutes)
+    lock_key = f"i8:payment_scheduling:lock:{date.today().isoformat()}"
+    if frappe.cache.get_value(lock_key):
+        frappe.log_error(
+            "schedule_weekly_payments skipped: already running or recently completed",
+            "I8 Payment Scheduling Lock",
+        )
+        return
+    frappe.cache.set_value(lock_key, 1, expires_in_sec=1800)
 
     today = date.today()
     # Calculate end of week (Sunday)
@@ -345,20 +358,56 @@ def schedule_weekly_payments():
 
 
 def _schedule_single_payment(inv: dict) -> dict:
-    """Schedule payment for a single invoice based on its payment method."""
-    mode = _get_payment_mode(inv["name"])
+    """Schedule payment for a single invoice based on its payment method.
+
+    Includes a per-invoice lock to prevent duplicate API calls in case of
+    concurrent or repeated execution.
+    """
+    invoice_name = inv["name"]
+
+    # Per-invoice lock: prevents same invoice being processed twice
+    lock_key = f"i8:payment_lock:{invoice_name}"
+    if frappe.cache.get_value(lock_key):
+        return {"status": "skipped", "invoice": invoice_name, "reason": "Already being processed (lock active)"}
+    frappe.cache.set_value(lock_key, 1, expires_in_sec=600)  # 10 min lock
+
+    # Double-check: re-verify no Payment Entry or Inter Payment Order was created
+    # between the SQL query and now (race condition guard)
+    has_payment = frappe.db.sql("""
+        SELECT 1 FROM `tabPayment Entry Reference` per
+        JOIN `tabPayment Entry` pe ON pe.name = per.parent
+        WHERE per.reference_name = %s AND pe.docstatus < 2
+        LIMIT 1
+    """, invoice_name)
+
+    if has_payment:
+        frappe.cache.delete_value(lock_key)
+        return {"status": "skipped", "invoice": invoice_name, "reason": "Payment Entry already exists"}
+
+    has_ipo = frappe.db.exists(
+        "Inter Payment Order",
+        {"purchase_invoice": invoice_name, "docstatus": ["<", 2]},
+    )
+    if has_ipo:
+        frappe.cache.delete_value(lock_key)
+        return {"status": "skipped", "invoice": invoice_name, "reason": "Inter Payment Order already exists"}
+
+    mode = _get_payment_mode(invoice_name)
     supplier = inv["supplier"]
 
-    if mode in ("Pix", "PIX"):
-        return _schedule_pix_payment(inv, supplier)
-    elif mode in ("Boleto",):
-        return _schedule_boleto_payment(inv)
-    elif mode in ("Credit Card",):
-        return _handle_credit_card_payment(inv)
-    elif mode in ("Wire Transfer", "TED"):
-        return _schedule_ted_payment(inv, supplier)
-    else:
-        return {"status": "skipped", "invoice": inv["name"], "reason": f"Unknown payment mode: {mode}"}
+    try:
+        if mode in ("Pix", "PIX"):
+            return _schedule_pix_payment(inv, supplier)
+        elif mode in ("Boleto",):
+            return _schedule_boleto_payment(inv)
+        elif mode in ("Credit Card",):
+            return _handle_credit_card_payment(inv)
+        elif mode in ("Wire Transfer", "TED"):
+            return _schedule_ted_payment(inv, supplier)
+        else:
+            return {"status": "skipped", "invoice": invoice_name, "reason": f"Unknown payment mode: {mode}"}
+    except Exception as e:
+        return {"status": "error", "invoice": invoice_name, "error": str(e)}
 
 
 def _get_payment_mode(invoice_name: str) -> str:
@@ -420,7 +469,9 @@ def _schedule_pix_payment(inv: dict, supplier: str) -> dict:
 
         response = client.send_pix(payment_data)
 
+        # Create Payment Entry immediately after API success to prevent duplicates
         pe_name = _create_payment_entry_draft(inv, "Pix", response)
+        frappe.db.commit()
 
         return {
             "status": "scheduled",
@@ -459,7 +510,10 @@ def _schedule_boleto_payment(inv: dict) -> dict:
         }
 
         response = client.pay_barcode(payment_data)
+
+        # Create Payment Entry immediately after API success to prevent duplicates
         pe_name = _create_payment_entry_draft(inv, "Boleto", response)
+        frappe.db.commit()
 
         return {
             "status": "scheduled",
