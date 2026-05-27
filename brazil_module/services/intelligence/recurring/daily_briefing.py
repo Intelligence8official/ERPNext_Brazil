@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, time as dt_time
 
 import anthropic
 import frappe
@@ -23,10 +23,18 @@ Rules:
 
 
 def scheduled_briefing():
-    """Scheduled job: send daily briefing via Telegram if enabled."""
+    """Scheduled job: send daily briefing via Telegram if enabled.
+
+    Runs every 15 minutes via scheduler. Checks if current time is within
+    the 15-minute window of the configured briefing_time and if briefing
+    hasn't already been sent today.
+    """
     if not frappe.db.get_single_value("I8 Agent Settings", "enabled"):
         return
     if not frappe.db.get_single_value("I8 Agent Settings", "briefing_enabled"):
+        return
+
+    if not _is_briefing_time():
         return
 
     today = date.today()
@@ -37,6 +45,39 @@ def scheduled_briefing():
     # Use LLM to format the briefing with JARVIS personality
     formatted = _format_with_jarvis(raw_data, user_name, today)
     _send_via_telegram(formatted or raw_data, buttons)
+
+
+def _is_briefing_time() -> bool:
+    """Check if current time matches the configured briefing_time (within 15-min window).
+
+    Also prevents duplicate sends by checking if briefing was already sent today
+    via the last_briefing_date cache key.
+    """
+    briefing_time_str = frappe.db.get_single_value("I8 Agent Settings", "briefing_time") or "08:00:00"
+
+    # Parse configured time
+    parts = briefing_time_str.split(":")
+    target_hour = int(parts[0])
+    target_minute = int(parts[1]) if len(parts) > 1 else 0
+
+    now = datetime.now()
+    target = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
+
+    # Check if we're within the 15-minute window starting at configured time
+    diff_minutes = (now - target).total_seconds() / 60
+    if not (0 <= diff_minutes < 15):
+        return False
+
+    # Prevent duplicate sends: check if already sent today
+    cache_key = "i8_last_briefing_date"
+    last_sent = frappe.cache.get_value(cache_key)
+    today_str = now.strftime("%Y-%m-%d")
+    if last_sent == today_str:
+        return False
+
+    # Mark as sent for today
+    frappe.cache.set_value(cache_key, today_str, expires_in_sec=86400)
+    return True
 
 
 def build_briefing() -> str:

@@ -79,8 +79,8 @@ scheduler_events = {
         "0 7 * * *": ["brazil_module.services.intelligence.recurring.expense_scheduler.daily_check"],
         # Intelligence8: Follow-up check at 09:00
         "0 9 * * *": ["brazil_module.services.intelligence.recurring.follow_up_manager.check_overdue"],
-        # Intelligence8: Daily briefing at 08:00
-        "0 8 * * *": [
+        # Intelligence8: Daily briefing (checks configured time every 15 min)
+        "*/15 * * * *": [
             "brazil_module.services.intelligence.recurring.daily_briefing.scheduled_briefing"
         ],
         # Intelligence8: Planning loop every hour at :30

@@ -1,6 +1,6 @@
 import sys
 import types as _types
-from datetime import date
+from datetime import date, datetime
 from unittest.mock import MagicMock, patch
 
 if "frappe" not in sys.modules or not isinstance(sys.modules["frappe"], MagicMock):
@@ -23,6 +23,7 @@ import unittest
 from brazil_module.services.intelligence.recurring.daily_briefing import (
     build_briefing,
     scheduled_briefing,
+    _is_briefing_time,
     _bank_balance_section,
     _payables_section,
     _pending_actions_section,
@@ -46,6 +47,7 @@ class TestScheduledBriefing(unittest.TestCase):
         frappe.db.count.return_value = 0
         frappe.get_all.return_value = []
         frappe.db.sql.return_value = []
+        frappe.cache.get_value.return_value = None
 
     def test_skips_when_agent_disabled(self):
         frappe.db.get_single_value.side_effect = lambda dt, field: False
@@ -62,6 +64,48 @@ class TestScheduledBriefing(unittest.TestCase):
         frappe.db.get_single_value.side_effect = side_effect
         scheduled_briefing()
         frappe.get_all.assert_not_called()
+
+
+class TestIsBriefingTime(unittest.TestCase):
+    def setUp(self):
+        frappe.reset_mock()
+        frappe.db.get_single_value.side_effect = None
+        frappe.cache.get_value.return_value = None
+
+    @patch("brazil_module.services.intelligence.recurring.daily_briefing.datetime")
+    def test_returns_true_at_configured_time(self, mock_dt):
+        frappe.db.get_single_value.return_value = "09:30:00"
+        frappe.cache.get_value.return_value = None
+        mock_dt.now.return_value = datetime(2026, 5, 27, 9, 35, 0)
+        self.assertTrue(_is_briefing_time())
+
+    @patch("brazil_module.services.intelligence.recurring.daily_briefing.datetime")
+    def test_returns_false_before_configured_time(self, mock_dt):
+        frappe.db.get_single_value.return_value = "09:30:00"
+        frappe.cache.get_value.return_value = None
+        mock_dt.now.return_value = datetime(2026, 5, 27, 9, 15, 0)
+        self.assertFalse(_is_briefing_time())
+
+    @patch("brazil_module.services.intelligence.recurring.daily_briefing.datetime")
+    def test_returns_false_after_window(self, mock_dt):
+        frappe.db.get_single_value.return_value = "09:30:00"
+        frappe.cache.get_value.return_value = None
+        mock_dt.now.return_value = datetime(2026, 5, 27, 9, 50, 0)
+        self.assertFalse(_is_briefing_time())
+
+    @patch("brazil_module.services.intelligence.recurring.daily_briefing.datetime")
+    def test_returns_false_if_already_sent_today(self, mock_dt):
+        frappe.db.get_single_value.return_value = "08:00:00"
+        mock_dt.now.return_value = datetime(2026, 5, 27, 8, 5, 0)
+        frappe.cache.get_value.return_value = "2026-05-27"
+        self.assertFalse(_is_briefing_time())
+
+    @patch("brazil_module.services.intelligence.recurring.daily_briefing.datetime")
+    def test_defaults_to_0800_when_no_config(self, mock_dt):
+        frappe.db.get_single_value.return_value = None
+        frappe.cache.get_value.return_value = None
+        mock_dt.now.return_value = datetime(2026, 5, 27, 8, 10, 0)
+        self.assertTrue(_is_briefing_time())
 
 
 class TestBuildBriefing(unittest.TestCase):
