@@ -356,5 +356,82 @@ class TestReconciliationStatusSection(unittest.TestCase):
         self.assertIn("3 transacoes pendentes", result)
 
 
+_DB = "brazil_module.services.intelligence.recurring.daily_briefing"
+
+
+class TestBriefingDedupLatch(unittest.TestCase):
+    """Regression tests for the dedup-latch bug (introduced 2026-05-27).
+
+    The briefing used to be marked 'sent' BEFORE sending, with no try/except,
+    so a single failure suppressed the briefing for the whole day with no retry.
+    The fix: mark 'sent' ONLY after a successful send.
+    """
+
+    def setUp(self):
+        frappe.reset_mock()
+        frappe.cache.set_value.reset_mock()
+
+        def gsv(_dt, field):
+            if field in ("enabled", "briefing_enabled"):
+                return True
+            if field == "briefing_time":
+                return "08:00:00"
+            return None
+
+        frappe.db.get_single_value.side_effect = gsv
+        frappe.cache.get_value.return_value = None  # not sent yet today
+        frappe.db.count.return_value = 0
+        frappe.get_all.return_value = []
+        frappe.db.sql.return_value = []
+
+    def _sent_marker_calls(self):
+        return [
+            c for c in frappe.cache.set_value.call_args_list
+            if c.args and c.args[0] == "i8_last_briefing_date"
+        ]
+
+    @patch(f"{_DB}.datetime")
+    def test_is_briefing_time_does_not_write_cache(self, mock_dt):
+        """The window check must be read-only (it used to write the marker)."""
+        mock_dt.now.return_value = datetime(2026, 6, 1, 8, 5, 0)
+        self.assertTrue(_is_briefing_time())
+        self.assertEqual(self._sent_marker_calls(), [])
+
+    @patch(f"{_DB}._send_via_telegram", side_effect=RuntimeError("telegram down"))
+    @patch(f"{_DB}.datetime")
+    def test_failed_send_does_not_latch(self, mock_dt, _mock_send):
+        """A raised send must NOT mark the day sent, so the next tick retries."""
+        mock_dt.now.return_value = datetime(2026, 6, 1, 8, 5, 0)
+        scheduled_briefing()
+        self.assertEqual(
+            self._sent_marker_calls(), [],
+            "briefing must not be marked sent when the send raises",
+        )
+
+    @patch(f"{_DB}._send_via_telegram", return_value=False)
+    @patch(f"{_DB}.datetime")
+    def test_unsent_returns_false_does_not_latch(self, mock_dt, _mock_send):
+        """If _send_via_telegram reports failure (False), do not mark sent."""
+        mock_dt.now.return_value = datetime(2026, 6, 1, 8, 5, 0)
+        scheduled_briefing()
+        self.assertEqual(self._sent_marker_calls(), [])
+
+    @patch(f"{_DB}._send_via_telegram", return_value=True)
+    @patch(f"{_DB}.datetime")
+    def test_successful_send_marks_sent(self, mock_dt, _mock_send):
+        """A successful send marks the day so it isn't re-sent."""
+        mock_dt.now.return_value = datetime(2026, 6, 1, 8, 5, 0)
+        scheduled_briefing()
+        calls = self._sent_marker_calls()
+        self.assertTrue(calls, "briefing must be marked sent after a successful send")
+        # Marker value is today's date (date.today()), matching the dedup read.
+        self.assertEqual(calls[0].args[1], date.today().strftime("%Y-%m-%d"))
+
+    def test_build_buttons_never_propagates_db_error(self):
+        """_build_briefing_buttons must swallow DB errors (return None)."""
+        frappe.db.count.side_effect = RuntimeError("db down")
+        self.assertIsNone(_build_briefing_buttons(date(2026, 6, 1)))
+
+
 if __name__ == "__main__":
     unittest.main()

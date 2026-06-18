@@ -51,9 +51,16 @@ doc_events = {
 # Scheduled Tasks
 scheduler_events = {
     "cron": {
-        # Fiscal: Every hour - fetch documents from SEFAZ
+        # NOTE: each cron expression must appear EXACTLY ONCE. This is a Python
+        # dict literal — a duplicated key silently overwrites the earlier entry,
+        # dropping its jobs. Group all jobs that share a schedule into one list.
+        #
+        # Every hour:
+        #   - Fiscal: fetch documents from SEFAZ
+        #   - Banking: check outbound payment status
         "0 * * * *": [
-            "brazil_module.services.fiscal.dfe_client.scheduled_fetch"
+            "brazil_module.services.fiscal.dfe_client.scheduled_fetch",
+            "brazil_module.services.banking.payment_service.scheduled_payment_status_check",
         ],
         # Fiscal: Every 5 minutes - check emails for NF attachments
         "*/5 * * * *": [
@@ -67,22 +74,17 @@ scheduler_events = {
         "*/30 * * * *": [
             "brazil_module.services.banking.boleto_service.scheduled_boleto_status_check"
         ],
-        # Banking: Every 15 minutes - check PIX charge status
+        # Every 15 minutes:
+        #   - Banking: check PIX charge status
+        #   - Intelligence8: daily briefing (only fires inside its configured window)
         "*/15 * * * *": [
-            "brazil_module.services.banking.pix_service.scheduled_pix_status_check"
-        ],
-        # Banking: Every hour - check outbound payment status
-        "0 * * * *": [
-            "brazil_module.services.banking.payment_service.scheduled_payment_status_check"
+            "brazil_module.services.banking.pix_service.scheduled_pix_status_check",
+            "brazil_module.services.intelligence.recurring.daily_briefing.scheduled_briefing",
         ],
         # Intelligence8: Daily expense check at 07:00
         "0 7 * * *": ["brazil_module.services.intelligence.recurring.expense_scheduler.daily_check"],
         # Intelligence8: Follow-up check at 09:00
         "0 9 * * *": ["brazil_module.services.intelligence.recurring.follow_up_manager.check_overdue"],
-        # Intelligence8: Daily briefing (checks configured time every 15 min)
-        "*/15 * * * *": [
-            "brazil_module.services.intelligence.recurring.daily_briefing.scheduled_briefing"
-        ],
         # Intelligence8: Planning loop every hour at :30
         "30 * * * *": [
             "brazil_module.services.intelligence.recurring.planning_loop.hourly_check"

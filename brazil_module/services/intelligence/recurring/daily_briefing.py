@@ -4,6 +4,13 @@ import anthropic
 import frappe
 
 
+# Cache key for the "briefing already sent today" dedup marker. Written by
+# scheduled_briefing() ONLY after a successful send (never before), so that a
+# failed send is retried on the next scheduler tick instead of being latched
+# off for the whole day.
+_BRIEFING_SENT_KEY = "i8_last_briefing_date"
+
+
 JARVIS_PERSONALITY = """You are I8Operator, the AI financial assistant for Intelligence8.
 Your personality: professional yet warm, subtly witty like the original JARVIS from Iron Man.
 You address the user by their first name. You are their trusted right hand for ERP operations.
@@ -38,20 +45,34 @@ def scheduled_briefing():
         return
 
     today = date.today()
-    raw_data = build_briefing()
-    user_name = _get_user_first_name()
-    buttons = _build_briefing_buttons(today)
+    try:
+        raw_data = build_briefing()
+        user_name = _get_user_first_name()
+        buttons = _build_briefing_buttons(today)
 
-    # Use LLM to format the briefing with JARVIS personality
-    formatted = _format_with_jarvis(raw_data, user_name, today)
-    _send_via_telegram(formatted or raw_data, buttons)
+        # Use LLM to format the briefing with JARVIS personality
+        formatted = _format_with_jarvis(raw_data, user_name, today)
+        sent = _send_via_telegram(formatted or raw_data, buttons)
+    except Exception as e:
+        # Do NOT mark as sent: leaving the dedup unset lets the next */15 tick
+        # retry, instead of latching the briefing off for the whole day.
+        frappe.log_error(str(e), "I8 Daily Briefing Error")
+        return
+
+    # Mark as sent ONLY after a successful send, so a transient failure retries.
+    if sent:
+        frappe.cache.set_value(
+            _BRIEFING_SENT_KEY, today.strftime("%Y-%m-%d"), expires_in_sec=86400
+        )
 
 
 def _is_briefing_time() -> bool:
-    """Check if current time matches the configured briefing_time (within 15-min window).
+    """Return True if now is within the 15-minute window after the configured
+    briefing_time AND the briefing has not already been sent today.
 
-    Also prevents duplicate sends by checking if briefing was already sent today
-    via the last_briefing_date cache key.
+    This is a READ-ONLY check. The "sent today" marker (_BRIEFING_SENT_KEY) is
+    written by scheduled_briefing() only after a successful send, so a failed
+    send is retried on the next scheduler tick rather than suppressed for 24h.
     """
     briefing_time_str = frappe.db.get_single_value("I8 Agent Settings", "briefing_time") or "08:00:00"
 
@@ -68,15 +89,11 @@ def _is_briefing_time() -> bool:
     if not (0 <= diff_minutes < 15):
         return False
 
-    # Prevent duplicate sends: check if already sent today
-    cache_key = "i8_last_briefing_date"
-    last_sent = frappe.cache.get_value(cache_key)
-    today_str = now.strftime("%Y-%m-%d")
-    if last_sent == today_str:
+    # Already sent today? (read-only — do not write the marker here)
+    last_sent = frappe.cache.get_value(_BRIEFING_SENT_KEY)
+    if last_sent == now.strftime("%Y-%m-%d"):
         return False
 
-    # Mark as sent for today
-    frappe.cache.set_value(cache_key, today_str, expires_in_sec=86400)
     return True
 
 
@@ -375,47 +392,55 @@ def _agent_cost_section(today: date) -> str:
 
 
 def _build_briefing_buttons(today: date) -> dict | None:
-    """Build inline keyboard buttons for actionable items in the briefing."""
-    buttons = []
+    """Build inline keyboard buttons for actionable items in the briefing.
 
-    # Pending approvals
-    pending = frappe.db.count("I8 Decision Log", {"result": "Pending", "docstatus": 0})
-    if pending > 0:
-        buttons.append([
-            {"text": f"Ver {pending} aprovacoes pendentes", "callback_data": "briefing:list_approvals"},
-        ])
-
-    # Overdue payables
-    overdue_count = frappe.db.count("Purchase Invoice", {
-        "docstatus": 1, "outstanding_amount": [">", 0], "due_date": ["<", today.isoformat()]
-    })
-    if overdue_count > 0:
-        buttons.append([
-            {"text": f"Ver {overdue_count} pagamentos vencidos", "callback_data": "briefing:list_overdue"},
-        ])
-
-    # NFs pending
+    Fully guarded: a DB error here must never propagate into scheduled_briefing()
+    (it is the only call in the send path that is not otherwise wrapped).
+    """
     try:
-        nf_pending = frappe.db.count("Nota Fiscal", {
-            "invoice_status": ["in", ["Pending", "New", ""]],
-            "processing_status": ["!=", "Cancelled"],
-        })
-        if nf_pending > 0:
+        buttons = []
+
+        # Pending approvals
+        pending = frappe.db.count("I8 Decision Log", {"result": "Pending", "docstatus": 0})
+        if pending > 0:
             buttons.append([
-                {"text": f"Processar {nf_pending} NFs pendentes", "callback_data": "briefing:process_nfs"},
+                {"text": f"Ver {pending} aprovacoes pendentes", "callback_data": "briefing:list_approvals"},
             ])
-    except Exception:
-        pass
 
-    # Reconciliation
-    buttons.append([
-        {"text": "Executar conciliacao bancaria", "callback_data": "briefing:reconcile"},
-    ])
+        # Overdue payables
+        overdue_count = frappe.db.count("Purchase Invoice", {
+            "docstatus": 1, "outstanding_amount": [">", 0], "due_date": ["<", today.isoformat()]
+        })
+        if overdue_count > 0:
+            buttons.append([
+                {"text": f"Ver {overdue_count} pagamentos vencidos", "callback_data": "briefing:list_overdue"},
+            ])
 
-    if not buttons:
+        # NFs pending
+        try:
+            nf_pending = frappe.db.count("Nota Fiscal", {
+                "invoice_status": ["in", ["Pending", "New", ""]],
+                "processing_status": ["!=", "Cancelled"],
+            })
+            if nf_pending > 0:
+                buttons.append([
+                    {"text": f"Processar {nf_pending} NFs pendentes", "callback_data": "briefing:process_nfs"},
+                ])
+        except Exception:
+            pass
+
+        # Reconciliation
+        buttons.append([
+            {"text": "Executar conciliacao bancaria", "callback_data": "briefing:reconcile"},
+        ])
+
+        if not buttons:
+            return None
+
+        return {"inline_keyboard": buttons}
+    except Exception as e:
+        frappe.log_error(str(e), "I8 Briefing Buttons Error")
         return None
-
-    return {"inline_keyboard": buttons}
 
 
 def _reconciliation_status_section() -> str:
@@ -501,18 +526,32 @@ def _format_with_jarvis(raw_data: str, user_name: str, today: date) -> str | Non
         return None
 
 
-def _send_via_telegram(message: str, reply_markup: dict | None = None) -> None:
-    """Send the briefing via Telegram."""
+def _send_via_telegram(message: str, reply_markup: dict | None = None) -> bool:
+    """Send the briefing via Telegram. Returns True only if the message was sent.
+
+    The return value drives the dedup marker in scheduled_briefing(): a False
+    return (no chat configured, or the Telegram API failed) leaves the briefing
+    un-marked so the next scheduler tick retries.
+    """
     try:
         from brazil_module.services.intelligence.channels.telegram_bot import TelegramBot
         bot = TelegramBot()
         chat_id = frappe.db.get_single_value("I8 Agent Settings", "telegram_chat_id")
-        if chat_id:
-            bot.send_message(chat_id, message, reply_markup)
+        if not chat_id:
+            return False
+        bot.send_message(chat_id, message, reply_markup)
+    except Exception as e:
+        frappe.log_error(str(e), "I8 Daily Briefing Error")
+        return False
+
+    # Telegram send succeeded — the best-effort desk notification must not
+    # affect the success result (a failure here would otherwise force a resend).
+    try:
         from brazil_module.services.intelligence.notifications import notify_desk
         notify_desk(
             title="I8-Operator Daily Briefing",
             message="Briefing diario enviado ao Telegram por I8-Operator",
         )
     except Exception as e:
-        frappe.log_error(str(e), "I8 Daily Briefing Error")
+        frappe.log_error(str(e), "I8 Desk Notify Error")
+    return True
