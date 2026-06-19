@@ -539,9 +539,15 @@ def _send_via_telegram(message: str, reply_markup: dict | None = None) -> bool:
         chat_id = frappe.db.get_single_value("I8 Agent Settings", "telegram_chat_id")
         if not chat_id:
             return False
-        bot.send_message(chat_id, message, reply_markup)
+        result = bot.send_message(chat_id, message, reply_markup)
     except Exception as e:
         frappe.log_error(str(e), "I8 Daily Briefing Error")
+        return False
+
+    # Telegram rejected the send (e.g. invalid bot token → {"ok": false}).
+    # send_message() already logged it; return False so the briefing retries
+    # on the next tick instead of being marked sent for the day.
+    if not (isinstance(result, dict) and result.get("ok")):
         return False
 
     # Telegram send succeeded — the best-effort desk notification must not

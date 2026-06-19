@@ -16,7 +16,7 @@ def check_nf_cancellations():
     """
     try:
         cancelled_with_invoices = frappe.db.sql("""
-            SELECT nf.name, nf.chave_de_acesso, nf.razao_social,
+            SELECT nf.name, nf.chave_de_acesso, nf.emitente_razao_social AS razao_social,
                    pi.name as invoice_name, pi.docstatus as invoice_status
             FROM `tabNota Fiscal` nf
             JOIN `tabPurchase Invoice` pi ON pi.nota_fiscal = nf.name
@@ -53,7 +53,7 @@ def check_tax_anomalies():
     try:
         # Get recent NFS-e with tax data
         nfs = frappe.db.sql("""
-            SELECT name, razao_social, valor_total, valor_servicos,
+            SELECT name, emitente_razao_social AS razao_social, valor_total, valor_servicos,
                    issqn_valor, issqn_aliquota,
                    pis_valor, cofins_valor, inss_valor, irrf_valor
             FROM `tabNota Fiscal`

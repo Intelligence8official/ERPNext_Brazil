@@ -89,7 +89,7 @@ def _check_nf_po_value_mismatch() -> list:
     results = []
     try:
         nfs = frappe.db.sql("""
-            SELECT nf.name, nf.valor_total, nf.razao_social,
+            SELECT nf.name, nf.valor_total, nf.emitente_razao_social AS razao_social,
                    po.name as po_name, po.grand_total as po_total
             FROM `tabNota Fiscal` nf
             JOIN `tabPurchase Order` po ON po.nota_fiscal = nf.name

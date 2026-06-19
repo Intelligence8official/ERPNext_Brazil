@@ -592,7 +592,7 @@ def on_nota_fiscal(doc, method=None):
         event_data={
             "module": "fiscal",
             "nota_fiscal": doc.name,
-            "supplier": doc.cnpj_emitente,
+            "supplier": doc.emitente_cnpj,
         },
         deduplicate=True,
     )

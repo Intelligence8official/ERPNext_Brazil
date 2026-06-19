@@ -373,6 +373,15 @@ class TelegramBot:
             payload.pop("parse_mode", None)
             resp = requests.post(url, json=payload, timeout=10)
             result = resp.json()
+        # Surface a still-failing send (e.g. an invalid/revoked bot token returns
+        # {"ok": false, "error_code": 401}) so it is visible in the Error Log
+        # instead of vanishing silently. Callers may inspect result["ok"].
+        if not result.get("ok"):
+            frappe.log_error(
+                f"Telegram sendMessage failed (chat_id={chat_id}): "
+                f"{result.get('error_code')} {result.get('description')}",
+                "I8 Telegram Send Error",
+            )
         return result
 
     def send_approval_request(self, decision: dict) -> dict:
