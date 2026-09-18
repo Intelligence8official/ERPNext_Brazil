@@ -118,9 +118,18 @@ timeouts into the new fields, and rewrite the registry rows. Old values map
 
 ## Cost
 
-- `llm/pricing.py` holds a per-provider table keyed by model id, with input, output
-  and cached-input rates, rewritten with today's prices. The Gemini 3.x Flash promo
-  ends on 2026-12-31 (prices double) — noted in the table.
+- `llm/pricing.py` holds a per-provider table keyed by model id, rewritten with
+  today's prices. The Gemini 3.x Flash promo ends on 2026-12-31 (input, output and
+  cached input all double) and the Gemini Pro models charge a second rate above 200k
+  input tokens — both in the table.
+- Input tokens are three buckets that never overlap: full rate, read from the cache
+  (a tenth) and written into it (a quarter more than full rate). Each adapter
+  normalizes, because the providers report them differently.
+- Gemini reports thinking tokens and tool-prompt tokens in counts of their own, and
+  bills them as output and input: a turn that spends its whole budget thinking would
+  otherwise be recorded as free.
+- Token budgets leave room for reasoning. On OpenAI and Google the budget covers
+  reasoning tokens too, so a tight one comes back empty and looks like a success.
 - An unknown model id is priced at the **most expensive known model of its provider**
   and logged. Today it silently bills at Sonnet rates, which under-reports; the
   budget gate must fail safe, not cheap.
@@ -142,7 +151,10 @@ it is pasted, not at 08:00 the next morning.
 
 - One contract test suite every adapter must pass against a fake SDK client:
   transcript conversion, tool call parsing, tool result round-trip, usage extraction,
-  error wrapping.
+  error wrapping, and replaying the provider's own turn.
+- A second suite builds requests with the providers' OWN types and reads responses
+  made of their own objects. A fake written from the adapter only proves the adapter
+  agrees with itself; the cache-write bucket was found by this suite, not by us.
 - Pricing tests per provider, including cached input and the unknown-model rule.
 - Factory tests: the provider switch, tier to model, timeouts, credential resolution.
 - The existing agent/orchestrator/briefing/anomaly tests move to the fake provider.
