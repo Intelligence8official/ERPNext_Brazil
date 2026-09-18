@@ -58,6 +58,15 @@ class TestRecurringExpenseFlow(unittest.TestCase):
         s.high_value_threshold = 10000
         s.daily_budget_usd = 10
         s.pause_on_budget_exceeded = False
+        # A site that has not run the rename patch yet: the new fields are
+        # empty and the old ones still hold the models in use.
+        s.llm_provider = "Anthropic"
+        s.model_fast = None
+        s.model_standard = None
+        s.model_deep = None
+        s.timeout_fast = None
+        s.timeout_standard = None
+        s.timeout_deep = None
         s.haiku_model = "claude-haiku-4-5-20251001"
         s.sonnet_model = "claude-sonnet-4-6"
         s.opus_model = "claude-opus-4-6"
@@ -136,13 +145,17 @@ class TestRecurringExpenseFlow(unittest.TestCase):
         self.assertEqual(result["status"], "skipped")
 
     def test_model_tiering(self):
-        """Verify correct model selection per event type."""
-        frappe.get_single.return_value = self._make_settings()
+        """Each kind of event asks for the kind of model it needs, and the
+        tier resolves to whatever model the chosen provider uses for it."""
+        settings = self._make_settings()
+        frappe.get_single.return_value = settings
         agent = agent_mod.Intelligence8Agent()
 
-        self.assertIn("haiku", agent.select_model("classify_email"))
-        self.assertIn("sonnet", agent.select_model("create_po"))
-        self.assertIn("opus", agent.select_model("anomaly_detected"))
+        self.assertEqual(agent.select_tier("classify_email"), "fast")
+        self.assertEqual(agent.select_tier("create_po"), "standard")
+        self.assertEqual(agent.select_tier("anomaly_detected"), "deep")
+        self.assertIn("haiku", agent.model_name("classify_email"))
+        self.assertIn("opus", agent.model_name("anomaly_detected"))
 
 
 if __name__ == "__main__":

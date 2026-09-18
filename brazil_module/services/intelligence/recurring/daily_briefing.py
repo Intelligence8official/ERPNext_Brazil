@@ -1,6 +1,5 @@
 from datetime import date, datetime, timedelta, time as dt_time
 
-import anthropic
 import frappe
 
 
@@ -491,42 +490,24 @@ def _get_user_first_name() -> str:
 
 
 def _format_with_jarvis(raw_data: str, user_name: str, today: date) -> str | None:
-    """Use Haiku to format the briefing with JARVIS personality."""
+    """Format the briefing in the I8Operator voice, on the fast tier of
+    whichever provider this site is pointed at."""
     try:
-        from brazil_module.intelligence8.doctype.i8_agent_settings.i8_agent_settings import I8AgentSettings
-        settings = I8AgentSettings.get_settings()
+        from brazil_module.services.intelligence.llm.client import LLM
 
-        client = anthropic.Anthropic(api_key=I8AgentSettings.get_api_key())
-        response = client.messages.create(
-            model=settings.haiku_model or "claude-haiku-4-5-20251001",
-            max_tokens=2000,
+        return LLM().ask(
             system=JARVIS_PERSONALITY,
-            messages=[{
-                "role": "user",
-                "content": (
-                    f"User name: {user_name}\n"
-                    f"Today: {today.strftime('%A, %d de %B de %Y')} "
-                    f"({_weekday_name(today)}, {today.strftime('%d/%m/%Y')})\n\n"
-                    f"Raw briefing data:\n{raw_data}"
-                ),
-            }],
-        )
-
-        formatted = response.content[0].text.strip()
-
-        # Log cost
-        from brazil_module.services.intelligence.cost_tracker import CostTracker
-        tracker = CostTracker()
-        tracker.log(
-            model=settings.haiku_model or "claude-haiku-4-5-20251001",
-            tokens_in=response.usage.input_tokens,
-            tokens_out=response.usage.output_tokens,
-            latency_ms=0,
+            prompt=(
+                f"User name: {user_name}\n"
+                f"Today: {today.strftime('%A, %d de %B de %Y')} "
+                f"({_weekday_name(today)}, {today.strftime('%d/%m/%Y')})\n\n"
+                f"Raw briefing data:\n{raw_data}"
+            ),
+            tier="fast",
+            max_tokens=2000,
             module="briefing",
             function_name="jarvis_format",
-        )
-
-        return formatted
+        ).strip()
 
     except Exception as e:
         frappe.log_error(str(e), "I8 JARVIS Briefing Format Error")

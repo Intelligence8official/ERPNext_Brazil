@@ -2,7 +2,6 @@ import json
 import re
 import time
 
-import anthropic
 import frappe
 
 from brazil_module.services.intelligence.action_executor import ActionExecutor
@@ -10,20 +9,26 @@ from brazil_module.services.intelligence.circuit_breaker import CircuitBreaker
 from brazil_module.services.intelligence.context_builder import ContextBuilder
 from brazil_module.services.intelligence.cost_tracker import CostTracker
 from brazil_module.services.intelligence.decision_engine import DecisionEngine
+from brazil_module.services.intelligence.llm.base import LLMError, ToolResult, ToolResults, Turn, UserTurn
+from brazil_module.services.intelligence.llm.client import LLM
+from brazil_module.services.intelligence.llm.factory import model_for
 from brazil_module.services.intelligence.orchestrator import generate_trace_id
 from brazil_module.services.intelligence.prompts.system_prompt import build_system_prompt
 from brazil_module.services.intelligence.tools import get_all_tool_schemas, execute_tool
 
 _circuit_breaker = CircuitBreaker()
 
-HAIKU_EVENTS = [
+# Which events deserve which kind of model. The names are the job, not the
+# vendor: the same three tiers exist at every provider.
+FAST_EVENTS = [
     "classify_email", "format_notification", "status_check",
     "simple_match", "recurring_schedule",
 ]
-OPUS_EVENTS = [
+DEEP_EVENTS = [
     "anomaly_detected", "high_value_decision",
     "complex_reconciliation", "multi_document_analysis",
 ]
+LEGACY_TIERS = {"haiku": "fast", "sonnet": "standard", "opus": "deep"}
 
 
 def _filter_by_patterns(schemas: list, patterns: list) -> list:
@@ -45,28 +50,23 @@ def _filter_by_patterns(schemas: list, patterns: list) -> list:
 class Intelligence8Agent:
     def __init__(self):
         self.settings = frappe.get_single("I8 Agent Settings")
-        self.client = anthropic.Anthropic(
-            api_key=self.settings.get_password("anthropic_api_key") if hasattr(self.settings, "get_password") else ""
-        )
+        self.llm = LLM(settings=self.settings)
         self.context_builder = ContextBuilder()
         self.decision_engine = DecisionEngine(self.settings)
         self.action_executor = ActionExecutor()
         self.cost_tracker = CostTracker()
         self._current_read_tools: set = set()
 
-    def select_model(self, event_type: str) -> str:
-        if event_type in HAIKU_EVENTS:
-            return self.settings.haiku_model
-        if event_type in OPUS_EVENTS:
-            return self.settings.opus_model
-        return self.settings.sonnet_model
+    def select_tier(self, event_type: str) -> str:
+        if event_type in FAST_EVENTS:
+            return "fast"
+        if event_type in DEEP_EVENTS:
+            return "deep"
+        return "standard"
 
-    def get_timeout(self, model: str) -> int:
-        if "haiku" in model:
-            return self.settings.haiku_timeout_seconds or 30
-        if "opus" in model:
-            return self.settings.opus_timeout_seconds or 120
-        return self.settings.sonnet_timeout_seconds or 60
+    def model_name(self, event_type: str) -> str:
+        """The model id, for the record kept in I8 Decision Log."""
+        return model_for(self.select_tier(event_type), self.settings)
 
     def process_event(self, event_type: str, event_data: dict) -> dict:
         if not self.settings.enabled:
@@ -129,8 +129,8 @@ class Intelligence8Agent:
             tools = get_all_tool_schemas()
             self._current_read_tools = set()
 
-        # Select model
-        model = self._resolve_model_for_module(registry, event_type)
+        # Which kind of model this module wants
+        tier = self._resolve_tier_for_module(registry, event_type)
 
         # Build context
         context = self.context_builder.build(event_type, event_data)
@@ -138,65 +138,51 @@ class Intelligence8Agent:
         if previous_context:
             user_message = f"Previous context from other modules:\n{previous_context}\n\n{user_message}"
 
-        # Run agentic loop
-        messages = [{"role": "user", "content": user_message}]
+        # Run agentic loop. The transcript is ours — plain turns the adapter
+        # translates on every call — so the loop no longer speaks any one
+        # vendor's dialect.
+        messages: list[Turn] = [UserTurn(user_message)]
         system = system_prompt + "\n\n" + context.get("module_context", "")
 
         all_results = []
         text_response = ""
         max_turns = 5
 
-        for turn in range(max_turns):
-            start = time.monotonic()
+        for _turn in range(max_turns):
             try:
-                response = self.client.messages.create(
-                    model=model,
-                    max_tokens=4096,
+                completion = self.llm.complete(
                     system=system,
                     messages=messages,
                     tools=tools,
+                    tier=tier,
+                    max_tokens=4096,
+                    module=module_name,
+                    function_name=event_type,
+                    trace_id=trace_id,
                 )
                 _circuit_breaker.record_success()
-            except Exception as e:
+            except LLMError as e:
                 _circuit_breaker.record_failure()
-                frappe.log_error(str(e), "Intelligence8 Claude API Error")
+                frappe.log_error(str(e), "Intelligence8 LLM Error")
                 return {"status": "error", "message": str(e), "results": [], "text": ""}
 
-            latency_ms = int((time.monotonic() - start) * 1000)
-            usage = response.usage
-            cache_hit = getattr(usage, "cache_read_input_tokens", 0) > 0
+            text_response += completion.text
+            confidence = self._extract_confidence(completion.text)
 
-            self.cost_tracker.log(
-                model=model,
-                tokens_in=usage.input_tokens,
-                tokens_out=usage.output_tokens,
-                latency_ms=latency_ms,
-                module=module_name,
-                function_name=event_type,
-                cache_hit=cache_hit,
-            )
+            tool_results = []
+            for call in completion.tool_calls:
+                result = self._handle_tool_call(call, event_type, event_data, confidence)
+                all_results.append(result)
+                tool_output = json.dumps(result.get("result", {"status": result["status"]}), default=str)
+                tool_results.append(
+                    ToolResult(call_id=call.id, name=call.name, content=tool_output[:4000])
+                )
 
-            confidence = self._extract_confidence(response)
-
-            tool_results_for_next_turn = []
-            for block in response.content:
-                if block.type == "text":
-                    text_response += block.text
-                elif block.type == "tool_use":
-                    result = self._handle_tool_call(block, event_type, event_data, confidence)
-                    all_results.append(result)
-                    tool_output = json.dumps(result.get("result", {"status": result["status"]}), default=str)
-                    tool_results_for_next_turn.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": tool_output[:4000],
-                    })
-
-            if response.stop_reason != "tool_use" or not tool_results_for_next_turn:
+            if not tool_results:
                 break
 
-            messages.append({"role": "assistant", "content": response.content})
-            messages.append({"role": "user", "content": tool_results_for_next_turn})
+            messages.append(completion.as_turn())
+            messages.append(ToolResults(tuple(tool_results)))
 
         return {"status": "completed", "results": all_results, "text": text_response}
 
@@ -232,17 +218,17 @@ class Intelligence8Agent:
         matched = _filter_by_patterns(all_schemas, patterns)
         return [s["name"] for s in matched]
 
-    def _resolve_model_for_module(self, registry: dict | None, event_type: str) -> str:
-        """Get the Claude model to use for this module."""
-        if registry and registry.get("default_model"):
-            model_key = registry["default_model"]
-            model_map = {
-                "haiku": self.settings.haiku_model,
-                "sonnet": self.settings.sonnet_model,
-                "opus": self.settings.opus_model,
-            }
-            return model_map.get(model_key, self.settings.sonnet_model)
-        return self.select_model(event_type)
+    def _resolve_tier_for_module(self, registry: dict | None, event_type: str) -> str:
+        """Which tier this module asked for.
+
+        Registry rows written before the rename still say haiku/sonnet/opus,
+        and a site is mid-upgrade between the code landing and the patch.
+        """
+        configured = (registry or {}).get("default_model")
+        if configured:
+            key = str(configured).strip().lower()
+            return LEGACY_TIERS.get(key, key if key in ("fast", "standard", "deep") else "standard")
+        return self.select_tier(event_type)
 
     def _send_response(self, event_data: dict, text: str) -> None:
         """Send agent's text response back to the originating channel."""
@@ -340,13 +326,9 @@ class Intelligence8Agent:
         return "\n".join(parts)
 
     @staticmethod
-    def _extract_confidence(response) -> float:
-        for block in response.content:
-            if block.type == "text":
-                match = re.search(r"[Cc]onfidence:\s*(0\.\d+|1\.0)", block.text)
-                if match:
-                    return float(match.group(1))
-        return 0.5
+    def _extract_confidence(text: str) -> float:
+        match = re.search(r"[Cc]onfidence:\s*(0\.\d+|1\.0)", text or "")
+        return float(match.group(1)) if match else 0.5
 
     def _send_approval_to_telegram(self, tool_name: str, tool_args: dict, confidence: float, log_name: str) -> None:
         """Send approval request with inline buttons to Telegram."""
@@ -446,9 +428,9 @@ class Intelligence8Agent:
         "p2p-send_po_to_supplier",  # sending PO is operational
     }
 
-    def _handle_tool_call(self, tool_block, event_type: str, event_data: dict, confidence: float) -> dict:
-        tool_name = tool_block.name
-        tool_args = tool_block.input
+    def _handle_tool_call(self, call, event_type: str, event_data: dict, confidence: float) -> dict:
+        tool_name = call.name
+        tool_args = call.arguments
 
         # Apply learning confidence adjustment
         try:
@@ -475,7 +457,7 @@ class Intelligence8Agent:
                         self.decision_engine.log_decision(
                             event_type=event_type, module=event_data.get("module", ""),
                             action=tool_name, actor="Agent", channel="system",
-                            confidence=confidence, model=self.select_model(event_type),
+                            confidence=confidence, model=self.model_name(event_type),
                             input_summary=json.dumps(tool_args, default=str)[:500],
                             reasoning="Auto-approved by Learning Loop",
                             result="Success", related_doctype=doctype,
@@ -510,7 +492,7 @@ class Intelligence8Agent:
                 self.decision_engine.log_decision(
                     event_type=event_type, module=event_data.get("module", ""),
                     action=tool_name, actor="Agent", channel="system",
-                    confidence=confidence, model=self.select_model(event_type),
+                    confidence=confidence, model=self.model_name(event_type),
                     input_summary=json.dumps(tool_args, default=str)[:500],
                     reasoning="Auto-approved",
                     result="Success", related_doctype=doctype,
@@ -532,7 +514,7 @@ class Intelligence8Agent:
             log_name = self.decision_engine.log_decision(
                 event_type=event_type, module=event_data.get("module", ""),
                 action=tool_name, actor="Agent", channel="system",
-                confidence=confidence, model=self.select_model(event_type),
+                confidence=confidence, model=self.model_name(event_type),
                 input_summary=json.dumps(tool_args, default=str)[:500],
                 reasoning="Below confidence threshold",
                 result="Pending",

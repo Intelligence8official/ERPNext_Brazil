@@ -8,7 +8,6 @@ with a natural, conversational tone.
 
 from datetime import date, timedelta
 
-import anthropic
 import frappe
 from frappe.utils import flt
 
@@ -285,31 +284,19 @@ def _notify_anomalies(anomalies: list) -> None:
 
 
 def _format_with_jarvis(raw_data: str, user_name: str) -> str | None:
-    """Format anomaly report with J.A.R.V.I.S. personality via Haiku."""
+    """Format the anomaly report in the J.A.R.V.I.S. voice, on the fast tier."""
     try:
-        from brazil_module.intelligence8.doctype.i8_agent_settings.i8_agent_settings import I8AgentSettings
-        settings = I8AgentSettings.get_settings()
+        from brazil_module.services.intelligence.llm.client import LLM
 
-        client = anthropic.Anthropic(api_key=I8AgentSettings.get_api_key())
-        response = client.messages.create(
-            model=settings.haiku_model or "claude-haiku-4-5-20251001",
-            max_tokens=1500,
+        # The facade picks the model of the tier and writes the cost down.
+        return LLM().ask(
             system=JARVIS_ANOMALY_PROMPT,
-            messages=[{"role": "user", "content": raw_data}],
-        )
-
-        # Log cost
-        from brazil_module.services.intelligence.cost_tracker import CostTracker
-        CostTracker().log(
-            model=settings.haiku_model or "claude-haiku-4-5-20251001",
-            tokens_in=response.usage.input_tokens,
-            tokens_out=response.usage.output_tokens,
-            latency_ms=0,
+            prompt=raw_data,
+            tier="fast",
+            max_tokens=1500,
             module="anomaly",
             function_name="jarvis_anomaly_format",
-        )
-
-        return response.content[0].text.strip()
+        ).strip()
 
     except Exception as e:
         frappe.log_error(str(e), "I8 JARVIS Anomaly Format Error")

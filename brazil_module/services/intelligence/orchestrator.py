@@ -11,7 +11,6 @@ Routing strategy:
 import json
 import uuid
 
-import anthropic
 import frappe
 
 
@@ -61,30 +60,22 @@ def _classify_with_llm(event_data: dict, settings) -> list[str]:
     )
 
     try:
-        from brazil_module.intelligence8.doctype.i8_agent_settings.i8_agent_settings import (
-            I8AgentSettings,
-        )
+        from brazil_module.services.intelligence.llm.client import LLM
 
-        client = anthropic.Anthropic(api_key=I8AgentSettings.get_api_key())
-
-        response = client.messages.create(
-            model=settings.haiku_model or "claude-haiku-4-5-20251001",
-            max_tokens=100,
+        result_text = LLM().ask(
             system=(
                 "You are a router. Given a user request and a list of available modules, "
                 "return ONLY the module name(s) that should handle it. "
                 "If the request spans multiple modules, return them comma-separated in execution order. "
                 "Return ONLY module names, nothing else."
             ),
-            messages=[
-                {
-                    "role": "user",
-                    "content": f"Request: {text}\n\nAvailable modules:\n{module_list}",
-                }
-            ],
-        )
+            prompt=f"Request: {text}\n\nAvailable modules:\n{module_list}",
+            tier="fast",
+            max_tokens=100,
+            module="orchestrator",
+            function_name="route_event",
+        ).strip()
 
-        result_text = response.content[0].text.strip()
         chosen = [m.strip() for m in result_text.split(",")]
         # Validate module names
         valid_names = {m["module_name"] for m in modules}

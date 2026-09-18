@@ -58,6 +58,15 @@ class TestAgentProcessEvent(unittest.TestCase):
         s.high_value_threshold = 10000
         s.daily_budget_usd = 10
         s.pause_on_budget_exceeded = False
+        # A site that has not run the rename patch yet: the new fields are
+        # empty and the old ones still hold the models in use.
+        s.llm_provider = "Anthropic"
+        s.model_fast = None
+        s.model_standard = None
+        s.model_deep = None
+        s.timeout_fast = None
+        s.timeout_standard = None
+        s.timeout_deep = None
         s.haiku_model = "claude-haiku-4-5-20251001"
         s.sonnet_model = "claude-sonnet-4-6"
         s.opus_model = "claude-opus-4-6"
@@ -74,57 +83,34 @@ class TestAgentProcessEvent(unittest.TestCase):
         result = agent.process_event("test", {})
         self.assertEqual(result["status"], "skipped")
 
-    def test_select_model_haiku_for_classify_email(self):
+    def test_simple_events_go_to_the_fast_tier(self):
         agent = _agent_mod.Intelligence8Agent()
-        model = agent.select_model("classify_email")
-        self.assertIn("haiku", model)
+        self.assertEqual(agent.select_tier("classify_email"), "fast")
 
-    def test_select_model_opus_for_anomaly(self):
+    def test_hard_events_go_to_the_deep_tier(self):
         agent = _agent_mod.Intelligence8Agent()
-        model = agent.select_model("anomaly_detected")
-        self.assertIn("opus", model)
+        self.assertEqual(agent.select_tier("anomaly_detected"), "deep")
 
-    def test_select_model_sonnet_for_default(self):
+    def test_everything_else_goes_to_the_standard_tier(self):
         agent = _agent_mod.Intelligence8Agent()
-        model = agent.select_model("create_po")
-        self.assertIn("sonnet", model)
+        self.assertEqual(agent.select_tier("create_po"), "standard")
 
 
 class TestExtractConfidence(unittest.TestCase):
     def test_extracts_confidence_from_text(self):
-        response = MagicMock()
-        text_block = MagicMock()
-        text_block.type = "text"
-        text_block.text = "I found a matching PO. Confidence: 0.92"
-        response.content = [text_block]
-        result = _agent_mod.Intelligence8Agent._extract_confidence(response)
+        result = _agent_mod.Intelligence8Agent._extract_confidence(
+            "I found a matching PO. Confidence: 0.92"
+        )
         self.assertAlmostEqual(result, 0.92)
 
     def test_returns_default_when_no_confidence(self):
-        response = MagicMock()
-        text_block = MagicMock()
-        text_block.type = "text"
-        text_block.text = "Doing something without mentioning confidence."
-        response.content = [text_block]
-        result = _agent_mod.Intelligence8Agent._extract_confidence(response)
+        result = _agent_mod.Intelligence8Agent._extract_confidence(
+            "Doing something without mentioning confidence."
+        )
         self.assertEqual(result, 0.5)
 
-    def test_returns_default_for_empty_response(self):
-        response = MagicMock()
-        response.content = []
-        result = _agent_mod.Intelligence8Agent._extract_confidence(response)
-        self.assertEqual(result, 0.5)
-
-    def test_extracts_from_tool_use_mixed_content(self):
-        response = MagicMock()
-        tool_block = MagicMock()
-        tool_block.type = "tool_use"
-        text_block = MagicMock()
-        text_block.type = "text"
-        text_block.text = "Confidence: 0.88"
-        response.content = [text_block, tool_block]
-        result = _agent_mod.Intelligence8Agent._extract_confidence(response)
-        self.assertAlmostEqual(result, 0.88)
+    def test_returns_default_for_an_answer_with_no_text(self):
+        self.assertEqual(_agent_mod.Intelligence8Agent._extract_confidence(""), 0.5)
 
 
 class TestOnCommunication(unittest.TestCase):
