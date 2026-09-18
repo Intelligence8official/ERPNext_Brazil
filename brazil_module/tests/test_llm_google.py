@@ -1,4 +1,3 @@
-import json
 import sys
 import unittest
 from types import SimpleNamespace
@@ -228,7 +227,7 @@ class TestGoogleProvider(ProviderContractTests, unittest.TestCase):
         self.assertEqual(captured[0]["config"]["http_options"], {"timeout": 30_000})
 
     def test_a_blocked_prompt_says_why(self):
-        adapter, captured = self.adapter_for(text="oi")
+        adapter, _ = self.adapter_for(text="oi")
         blocked = SimpleNamespace(
             candidates=[],
             usage_metadata=None,

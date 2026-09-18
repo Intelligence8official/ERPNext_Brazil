@@ -65,7 +65,7 @@ def _capture(adapter, attr, **overrides):
         captured.update(kwargs)
         raise _Stop()
 
-    setattr(adapter, "_client", _Client(attr, create))
+    adapter._client = _Client(attr, create)
     kwargs = {"model": "m", "system": "s", "messages": TRANSCRIPT, "tools": TOOLS, "max_tokens": 256}
     kwargs.update(overrides)
     try:
