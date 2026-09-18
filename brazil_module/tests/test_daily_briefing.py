@@ -111,7 +111,13 @@ class TestIsBriefingTime(unittest.TestCase):
 class TestBuildBriefing(unittest.TestCase):
     def setUp(self):
         frappe.reset_mock()
+        # reset_mock() keeps side_effect, and other test files leave one behind
+        # (and leave now_datetime answering with a string, which the support
+        # ticket section does date arithmetic on).
+        frappe.get_all.side_effect = None
         frappe.get_all.return_value = []
+        frappe.utils.now_datetime.side_effect = None
+        frappe.utils.now_datetime.return_value = datetime(2026, 9, 17, 8, 0, 0)
         frappe.db.count.return_value = 0
         frappe.db.sql.return_value = []
 
@@ -130,6 +136,9 @@ class TestBuildBriefing(unittest.TestCase):
         self.assertTrue(
             any(day in result for day in ["Segunda", "Terca", "Quarta", "Quinta", "Sexta", "Sabado", "Domingo"])
         )
+
+    def test_includes_support_tickets_section(self):
+        self.assertIn("*Chamados da Plataforma:*", build_briefing())
 
 
 class TestBankBalanceSection(unittest.TestCase):

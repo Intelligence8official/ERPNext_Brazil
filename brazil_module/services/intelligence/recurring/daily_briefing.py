@@ -20,10 +20,14 @@ Rules:
 - Start with a warm greeting using the user's name and mention the day/date in Portuguese
 - Use a natural flow — don't just list items mechanically
 - Highlight what needs attention (overdue payments, pending approvals) with appropriate urgency
+- For support tickets ("Chamados da Plataforma"), lead with the ones that have been
+  waiting on us the longest, and flag any whose subject suggests the customer is
+  blocked (login, payment, error, outage). Keep suggestions (Feature Requests) to one line
 - If everything is fine, be reassuring
 - Add subtle personality — a light observation or encouragement
 - Use Markdown formatting (bold, italic) for Telegram
-- Keep it concise but complete — max 2000 chars
+- Keep it concise but complete — max 2500 chars. Never drop a section to fit:
+  shorten the lines instead, and keep every section heading that the data has
 - Write entirely in Brazilian Portuguese
 - Sign off as "I8Operator" at the end
 """
@@ -106,6 +110,8 @@ def build_briefing() -> str:
     Each section is wrapped in try/except so a failure in one section
     doesn't prevent the rest of the briefing from being sent.
     """
+    from brazil_module.services.intelligence.analytics.support_tickets import support_tickets_section
+
     today = date.today()
     is_monday = today.weekday() == 0
 
@@ -115,6 +121,7 @@ def build_briefing() -> str:
         _reconciliation_status_section,
         lambda: _payables_section(today, is_monday),
         _pending_actions_section,
+        lambda: support_tickets_section(is_monday),
     ]
 
     if is_monday:
