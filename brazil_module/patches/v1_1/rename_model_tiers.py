@@ -57,8 +57,13 @@ def _set_if_empty(field: str, value: str) -> None:
 
 
 def _rewrite_registry(field: str, old: str, new: str) -> None:
-    """Raw SQL on purpose: by the time this runs the Select no longer offers
-    the old option, and a validated write would be refused."""
+    """Raw SQL on purpose.
+
+    Patches in this app run before the DocType sync, so the Select still
+    offers the old options here — but a validated write would load every row
+    through the ORM for a value swap, and would start refusing the day this
+    patch is re-run after the sync.
+    """
     try:
         frappe.db.sql(
             f"UPDATE `tabI8 Module Registry` SET `{field}` = %s WHERE `{field}` = %s",

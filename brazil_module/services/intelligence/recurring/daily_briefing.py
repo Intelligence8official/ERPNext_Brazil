@@ -504,7 +504,7 @@ def _format_with_jarvis(raw_data: str, user_name: str, today: date) -> str | Non
                 f"Raw briefing data:\n{raw_data}"
             ),
             tier="fast",
-            max_tokens=2000,
+            max_tokens=3000,
             module="briefing",
             function_name="jarvis_format",
         ).strip()

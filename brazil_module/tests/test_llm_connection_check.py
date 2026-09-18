@@ -40,14 +40,25 @@ class TestConnectionCheck(unittest.TestCase):
         self.assertEqual(result["model"], "gemini-3.8-flash")
         self.assertEqual(result["answer"], "OK")
 
-    def test_spends_as_little_as_possible(self):
+    def test_leaves_room_for_the_model_to_think(self):
+        # On a reasoning model the budget covers reasoning tokens too: a tight
+        # one comes back empty and the check would call a good credential bad.
         llm = MagicMock()
         llm.ask.return_value = "OK"
 
         with patch.object(check_mod, "LLM", return_value=llm):
             check_connection()
 
-        self.assertLessEqual(llm.ask.call_args.kwargs["max_tokens"], 16)
+        self.assertGreaterEqual(llm.ask.call_args.kwargs["max_tokens"], 256)
+
+    def test_an_empty_answer_is_not_a_working_connection(self):
+        llm = MagicMock()
+        llm.ask.return_value = "   "
+
+        with patch.object(check_mod, "LLM", return_value=llm):
+            result = check_connection()
+
+        self.assertEqual(result["status"], "error")
 
     def test_a_refused_credential_comes_back_readable(self):
         llm = MagicMock()

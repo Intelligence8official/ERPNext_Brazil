@@ -56,6 +56,8 @@ def _fake_client(*, text="", tool_calls=(), usage=(0, 0, 0), error=None, capture
         )
 
     response = SimpleNamespace(
+        status="completed",
+        incomplete_details=None,
         output=items if output is None else output,
         usage=SimpleNamespace(
             input_tokens=tokens_in,
@@ -91,6 +93,9 @@ class TestOpenAIProvider(ProviderContractTests, unittest.TestCase):
         }
         kwargs.update(overrides)
         return adapter.complete(**kwargs)
+
+    def assert_replayed(self, payload, provider_state):
+        self.assertEqual(payload["input"][1:], list(provider_state))
 
     # --- what is particular to the Responses API ---
 
@@ -175,6 +180,51 @@ class TestOpenAIProvider(ProviderContractTests, unittest.TestCase):
             self.complete(adapter)
 
         self.assertIn("erp-list_documents", str(raised.exception))
+
+    def test_a_refusal_is_an_error_not_an_empty_answer(self):
+        # A refusal arrives inside the message item. Read only as text it
+        # comes out as "", and the agent loop takes that for a finished turn.
+        adapter, _ = self.adapter_for(text="oi")
+        refused = SimpleNamespace(
+            status="completed",
+            incomplete_details=None,
+            output=[
+                SimpleNamespace(
+                    type="message",
+                    content=[SimpleNamespace(type="refusal", refusal="I cannot help with that")],
+                )
+            ],
+            usage=SimpleNamespace(input_tokens=5, output_tokens=1, input_tokens_details=SimpleNamespace(cached_tokens=0)),
+        )
+        adapter._client.responses.create = lambda **kwargs: refused
+
+        with self.assertRaises(LLMError) as raised:
+            self.complete(adapter)
+
+        self.assertIn("I cannot help with that", str(raised.exception))
+
+    def test_a_truncated_answer_says_it_was_truncated(self):
+        # The budget can be spent entirely on reasoning tokens, and what comes
+        # back is an empty answer that looks successful.
+        adapter, _ = self.adapter_for(text="oi")
+        truncated = SimpleNamespace(
+            status="incomplete",
+            incomplete_details=SimpleNamespace(reason="max_output_tokens"),
+            output=[],
+            usage=SimpleNamespace(input_tokens=5, output_tokens=16, input_tokens_details=SimpleNamespace(cached_tokens=0)),
+        )
+        adapter._client.responses.create = lambda **kwargs: truncated
+
+        with self.assertRaises(LLMError) as raised:
+            self.complete(adapter)
+
+        self.assertIn("max_output_tokens", str(raised.exception))
+
+    def test_an_answer_with_nothing_in_it_is_an_error(self):
+        adapter, _ = self.adapter_for(text="")
+
+        with self.assertRaises(LLMError):
+            self.complete(adapter)
 
     def test_passes_the_timeout_through(self):
         adapter, captured = self.adapter_for(text="oi")

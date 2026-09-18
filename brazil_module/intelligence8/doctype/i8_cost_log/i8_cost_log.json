@@ -13,6 +13,7 @@
   "tokens_in",
   "tokens_out",
   "cached_tokens",
+  "cache_write_tokens",
   "cost_usd",
   "latency_ms",
   "cache_hit",
@@ -73,10 +74,18 @@
    "description": "Input tokens served from the prompt cache, billed at the cached rate"
   },
   {
+   "fieldname": "cache_write_tokens",
+   "fieldtype": "Int",
+   "label": "Cache Write Tokens",
+   "read_only": 1,
+   "description": "Input tokens written into the prompt cache, billed above the input rate"
+  },
+  {
    "fieldname": "cost_usd",
-   "fieldtype": "Currency",
+   "fieldtype": "Float",
    "label": "Cost (USD)",
-   "in_list_view": 1
+   "in_list_view": 1,
+   "precision": "9"
   },
   {
    "fieldname": "latency_ms",

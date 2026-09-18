@@ -71,7 +71,8 @@ def _classify_with_llm(event_data: dict, settings) -> list[str]:
             ),
             prompt=f"Request: {text}\n\nAvailable modules:\n{module_list}",
             tier="fast",
-            max_tokens=100,
+            # Room for reasoning tokens: the answer itself is a few words.
+            max_tokens=512,
             module="orchestrator",
             function_name="route_event",
         ).strip()

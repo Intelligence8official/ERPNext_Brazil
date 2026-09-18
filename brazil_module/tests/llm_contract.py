@@ -10,7 +10,7 @@ A subclass implements `adapter_for()`, which builds the adapter over a fake
 SDK client shaped like that provider's own responses.
 """
 
-from brazil_module.services.intelligence.llm.base import LLMError
+from brazil_module.services.intelligence.llm.base import LLMError, UserTurn
 
 
 class ProviderContractTests:
@@ -78,6 +78,28 @@ class ProviderContractTests:
 
         self.assertEqual(raised.exception.provider, self.provider_name)
         self.assertIn("provider is down", str(raised.exception))
+
+    def test_replays_the_models_own_turn_verbatim(self):
+        """The reasoning state of a turn has to go back with the tool result.
+
+        A reasoning model refuses the next turn without it — OpenAI answers
+        400 for a function_call whose reasoning item is missing, and Gemini
+        requires the thought signatures to be resent unchanged. The adapter
+        keeps the provider's own turn and sends it back as it came.
+        """
+        adapter, captured = self.adapter_for(
+            text="vou ler", tool_calls=(("call_1", "erp-read_document", {}),)
+        )
+
+        first = self.complete(adapter)
+        self.complete(adapter, messages=[UserTurn("oi"), first.as_turn()])
+
+        self.assertTrue(first.provider_state, "the adapter kept no provider turn")
+        self.assert_replayed(captured[1], first.provider_state)
+
+    def assert_replayed(self, payload: dict, provider_state: tuple) -> None:
+        """Each provider puts the turn back in a different place."""
+        raise NotImplementedError
 
     def test_refuses_an_unportable_tool_name_before_spending_a_call(self):
         adapter, captured = self.adapter_for(text="oi")

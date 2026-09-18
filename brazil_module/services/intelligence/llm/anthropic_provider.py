@@ -77,6 +77,11 @@ def _turn_to_message(turn: Turn) -> dict:
         return {"role": "user", "content": turn.text}
 
     if isinstance(turn, AssistantTurn):
+        if turn.provider_state:
+            # Its own blocks, in their own order. Thinking blocks are signed,
+            # and rebuilding them from text and calls loses the signature.
+            return {"role": "assistant", "content": list(turn.provider_state)}
+
         content = []
         if turn.text:
             content.append({"type": "text", "text": turn.text})
@@ -113,10 +118,12 @@ def _to_completion(response, model: str, provider: str) -> Completion:
     return Completion(
         text=text,
         tool_calls=tuple(calls),
+        provider_state=tuple(getattr(response, "content", None) or ()),
         usage=Usage(
             input_tokens=int(getattr(usage, "input_tokens", 0) or 0),
             output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
             cached_input_tokens=cached,
+            cache_write_tokens=int(getattr(usage, "cache_creation_input_tokens", 0) or 0),
         ),
         model=model,
         provider=provider,

@@ -293,7 +293,7 @@ def _format_with_jarvis(raw_data: str, user_name: str) -> str | None:
             system=JARVIS_ANOMALY_PROMPT,
             prompt=raw_data,
             tier="fast",
-            max_tokens=1500,
+            max_tokens=2500,
             module="anomaly",
             function_name="jarvis_anomaly_format",
         ).strip()

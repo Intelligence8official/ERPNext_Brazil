@@ -14,7 +14,12 @@ from brazil_module.services.intelligence.llm.client import LLM
 from brazil_module.services.intelligence.llm.factory import model_for
 
 PROMPT = "Answer with the single word OK."
-MAX_TOKENS = 16
+MAX_TOKENS = 256
+"""Room for the model to think.
+
+On a reasoning model the budget covers reasoning tokens as well as the answer,
+and a tight one comes back empty — which would report a perfectly good
+credential as broken."""
 
 
 def check_connection() -> dict:
@@ -32,6 +37,9 @@ def check_connection() -> dict:
         return {"status": "error", "message": str(e)}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+    if not (answer or "").strip():
+        return {"status": "error", "message": "The provider answered nothing"}
 
     return {
         "status": "success",

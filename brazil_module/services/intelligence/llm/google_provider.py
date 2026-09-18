@@ -116,8 +116,10 @@ class GoogleProvider:
         config: dict = {"system_instruction": system, "max_output_tokens": max_tokens}
         if tools:
             config["tools"] = [{"function_declarations": [_declaration(tool) for tool in tools]}]
-            # Left on, the SDK would run our Python functions itself; deciding
-            # whether a tool may run is the agent's job, not the SDK's.
+            # Said out loud although the SDK only ever calls functions it can
+            # call — our declarations are dicts, never callables. Deciding
+            # whether a tool may run is the agent's job, and a future SDK
+            # should not get to change that by default.
             config["automatic_function_calling"] = {"disable": True}
         if timeout:
             # HttpOptions.timeout is MILLISECONDS here, unlike every other SDK
@@ -153,6 +155,11 @@ def _turn_to_content(turn: Turn) -> dict:
         return {"role": "user", "parts": [{"text": turn.text}]}
 
     if isinstance(turn, AssistantTurn):
+        if turn.provider_state:
+            # Gemini requires the thought signatures of a turn to come back
+            # exactly as they were received.
+            return turn.provider_state[0]
+
         parts = []
         if turn.text:
             parts.append({"text": turn.text})
@@ -162,13 +169,7 @@ def _turn_to_content(turn: Turn) -> dict:
         return {"role": "model", "parts": parts}
 
     if isinstance(turn, ToolResults):
-        return {
-            "role": "user",
-            "parts": [
-                {"function_response": {"name": result.name, "response": _as_object(result.content)}}
-                for result in turn.results
-            ],
-        }
+        return {"role": "user", "parts": [_function_response(result) for result in turn.results]}
 
     raise LLMError("google", None, f"Cannot send a {type(turn).__name__} to the model")
 
@@ -191,14 +192,33 @@ def _empty_answer_reason(candidate) -> str:
     return f"The model answered nothing ({reason}) {message}".strip()
 
 
+def _function_response(result) -> dict:
+    """One tool result, as Gemini reads it.
+
+    The id goes back only when the model issued one: two parallel calls to the
+    same tool are told apart by id, never by name. A synthetic id of ours
+    would be answering something nobody asked.
+    """
+    response = {"function_response": {"name": result.name, "response": _as_object(result.content)}}
+    if result.call_id and not result.call_id.startswith(f"{result.name}-"):
+        response["function_response"]["id"] = result.call_id
+    return response
+
+
 def _as_object(content: str) -> dict:
-    """A function response has to be an object. Our tools answer JSON, which is
-    sometimes a list or a bare value."""
+    """Always under `output`.
+
+    A function response is an object, and Gemini gives two of its keys a
+    meaning: `output` is the result and `error` is a failure — anything else
+    alongside an `error` key is thrown away. Several of our tools answer
+    `{"error": ...}`, so wrapping keeps the payload whole and the semantics
+    ours.
+    """
     try:
         parsed = json.loads(content)
     except (TypeError, ValueError):
-        return {"result": content}
-    return parsed if isinstance(parsed, dict) else {"result": parsed}
+        return {"output": content}
+    return {"output": parsed}
 
 
 def _to_completion(response, model: str, provider: str) -> Completion:
@@ -233,14 +253,20 @@ def _to_completion(response, model: str, provider: str) -> Completion:
     usage = getattr(response, "usage_metadata", None)
     cached = int(getattr(usage, "cached_content_token_count", 0) or 0)
     prompt_tokens = int(getattr(usage, "prompt_token_count", 0) or 0)
+    # Gemini reports four DISJOINT counts. Thinking tokens are billed as
+    # output and the tokens the tool results took are billed as input; reading
+    # only the first two of the four bills a fraction of the call.
+    thoughts = int(getattr(usage, "thoughts_token_count", 0) or 0)
+    tool_prompt = int(getattr(usage, "tool_use_prompt_token_count", 0) or 0)
     return Completion(
         text=text,
         tool_calls=tuple(calls),
+        provider_state=(getattr(candidates[0], "content", None),),
         usage=Usage(
             # `prompt_token_count` includes the cached tokens; the two must not
             # overlap once they reach the cost table.
-            input_tokens=max(prompt_tokens - cached, 0),
-            output_tokens=int(getattr(usage, "candidates_token_count", 0) or 0),
+            input_tokens=max(prompt_tokens - cached, 0) + tool_prompt,
+            output_tokens=int(getattr(usage, "candidates_token_count", 0) or 0) + thoughts,
             cached_input_tokens=cached,
         ),
         model=model,

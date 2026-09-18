@@ -117,6 +117,7 @@ class LLM:
                 tokens_in=completion.usage.input_tokens,
                 tokens_out=completion.usage.output_tokens,
                 cached_tokens=completion.usage.cached_input_tokens,
+                cache_write_tokens=completion.usage.cache_write_tokens,
                 **context,
             )
         except Exception as e:

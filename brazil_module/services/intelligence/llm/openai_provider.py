@@ -7,9 +7,10 @@ differ between the two, and following the recommended one keeps this adapter
 from being rewritten next year.
 
 Two traps this adapter defuses. Tools are internally tagged here (no nested
-`function` object), and leaving `strict` unset makes the API ATTEMPT strict
-mode, which refuses schemas the other two providers accept — so it is set
-explicitly. And `input_tokens` INCLUDES the cached ones, which are subtracted
+`function` object), and leaving `strict` unset makes the API attempt strict
+mode and fall back on its own — so it is set explicitly, and what the model
+gets is the same schema the other two providers get. And `input_tokens`
+INCLUDES both the cached and the cache-written ones, which are subtracted
 before they reach the cost table.
 """
 
@@ -91,6 +92,11 @@ def _turn_to_items(turn: Turn) -> list[dict]:
         return [{"role": "user", "content": turn.text}]
 
     if isinstance(turn, AssistantTurn):
+        if turn.provider_state:
+            # The reasoning items travel with the function calls they belong
+            # to; sending the call without its reasoning item is a 400.
+            return list(turn.provider_state)
+
         items = []
         if turn.text:
             items.append({"role": "assistant", "content": turn.text})
@@ -121,8 +127,13 @@ def _to_completion(response, model: str, provider: str) -> Completion:
         kind = getattr(item, "type", None)
         if kind == "message":
             for part in getattr(item, "content", None) or []:
-                if getattr(part, "type", None) == "output_text":
+                part_kind = getattr(part, "type", None)
+                if part_kind == "output_text":
                     text += part.text
+                elif part_kind == "refusal":
+                    # A refusal lives inside the message. Read as text it is
+                    # an empty answer, and an empty answer looks finished.
+                    raise LLMError(provider, None, f"The model refused: {part.refusal}")
         elif kind == "function_call":
             calls.append(
                 ToolCall(
@@ -132,16 +143,27 @@ def _to_completion(response, model: str, provider: str) -> Completion:
                 )
             )
 
+    if getattr(response, "status", None) == "incomplete":
+        # Usually the whole budget went into reasoning tokens.
+        reason = getattr(getattr(response, "incomplete_details", None), "reason", "unknown")
+        raise LLMError(provider, None, f"The answer was cut short ({reason})")
+
+    if not text and not calls:
+        raise LLMError(provider, None, "The model answered nothing")
+
     usage = getattr(response, "usage", None)
     details = getattr(usage, "input_tokens_details", None)
     cached = int(getattr(details, "cached_tokens", 0) or 0)
+    written = int(getattr(details, "cache_write_tokens", 0) or 0)
     return Completion(
         text=text,
         tool_calls=tuple(calls),
+        provider_state=tuple(getattr(response, "output", None) or ()),
         usage=Usage(
-            input_tokens=max(int(getattr(usage, "input_tokens", 0) or 0) - cached, 0),
+            input_tokens=max(int(getattr(usage, "input_tokens", 0) or 0) - cached - written, 0),
             output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
             cached_input_tokens=cached,
+            cache_write_tokens=written,
         ),
         model=model,
         provider=provider,

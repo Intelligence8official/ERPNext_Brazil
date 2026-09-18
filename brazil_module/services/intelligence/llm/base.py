@@ -12,10 +12,11 @@ tool loop to one vendor. Here a transcript is a sequence of plain turns and
 each adapter translates the whole thing on every call, holding nothing.
 
 On token counting: `Usage.input_tokens` is what is billed at the full input
-rate and `cached_input_tokens` what is billed at the cached rate — the two
-never overlap. The providers disagree on this (Anthropic's `input_tokens`
-already excludes cache reads, Google's `prompt_token_count` includes them),
-so each adapter subtracts before building `Usage`.
+rate, `cached_input_tokens` what is read from the cache and
+`cache_write_tokens` what is written into it — the three never overlap. The
+providers disagree on this (Anthropic's `input_tokens` already excludes both,
+Google's `prompt_token_count` includes the cached ones), so each adapter
+subtracts before building `Usage`.
 """
 
 import re
@@ -81,6 +82,12 @@ class UserTurn:
 class AssistantTurn:
     text: str = ""
     tool_calls: tuple[ToolCall, ...] = ()
+    provider_state: tuple = ()
+    """The provider's own version of this turn, kept opaque and replayed as it
+    came. Reasoning models carry state in it that the next turn is refused
+    without: OpenAI answers 400 to a function_call whose reasoning item is
+    missing, Gemini requires the thought signatures back unchanged, and
+    Anthropic refuses thinking blocks that were dropped or reordered."""
 
 
 @dataclass(frozen=True)
@@ -95,9 +102,14 @@ Turn = UserTurn | AssistantTurn | ToolResults
 
 @dataclass(frozen=True)
 class Usage:
+    """Input tokens come in three buckets with three prices, and they never
+    overlap: full rate, read from the cache (a tenth), and written INTO the
+    cache (a quarter more than full rate)."""
+
     input_tokens: int
     output_tokens: int
     cached_input_tokens: int = 0
+    cache_write_tokens: int = 0
 
 
 @dataclass(frozen=True)
@@ -107,6 +119,7 @@ class Completion:
     model: str
     provider: str
     tool_calls: tuple[ToolCall, ...] = field(default_factory=tuple)
+    provider_state: tuple = ()
 
     @property
     def wants_tools(self) -> bool:
@@ -114,7 +127,9 @@ class Completion:
 
     def as_turn(self) -> AssistantTurn:
         """This answer, as the transcript entry the next call replays."""
-        return AssistantTurn(text=self.text, tool_calls=self.tool_calls)
+        return AssistantTurn(
+            text=self.text, tool_calls=self.tool_calls, provider_state=self.provider_state
+        )
 
 
 class LLMProvider(Protocol):

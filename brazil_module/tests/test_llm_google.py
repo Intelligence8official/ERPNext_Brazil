@@ -54,6 +54,8 @@ def _fake_client(*, text="", tool_calls=(), usage=(0, 0, 0), error=None, capture
             prompt_token_count=tokens_in,
             candidates_token_count=tokens_out,
             cached_content_token_count=cached,
+            thoughts_token_count=0,
+            tool_use_prompt_token_count=0,
         ),
     )
 
@@ -84,6 +86,9 @@ class TestGoogleProvider(ProviderContractTests, unittest.TestCase):
         }
         kwargs.update(overrides)
         return adapter.complete(**kwargs)
+
+    def assert_replayed(self, payload, provider_state):
+        self.assertIs(payload["contents"][1], provider_state[0])
 
     # --- what is particular to the Gemini wire format ---
 
@@ -134,7 +139,13 @@ class TestGoogleProvider(ProviderContractTests, unittest.TestCase):
         self.assertEqual(turn["role"], "user")
         self.assertEqual(
             turn["parts"][0],
-            {"function_response": {"name": "erp-read_document", "response": {"ok": True}}},
+            {
+                "function_response": {
+                    "name": "erp-read_document",
+                    "response": {"output": {"ok": True}},
+                    "id": "call_1",
+                }
+            },
         )
 
     def test_a_tool_result_that_is_not_an_object_is_wrapped(self):
@@ -144,7 +155,47 @@ class TestGoogleProvider(ProviderContractTests, unittest.TestCase):
         self.complete(adapter, messages=[ToolResults((ToolResult("c1", "erp-list_documents", "[1, 2]"),))])
 
         response = captured[0]["contents"][0]["parts"][0]["function_response"]["response"]
-        self.assertEqual(response, {"result": [1, 2]})
+        # Always under `output`: Gemini reads a bare `error` key as a failed
+        # call and throws the rest of the payload away.
+        self.assertEqual(response, {"output": [1, 2]})
+
+    def test_a_tool_result_carries_the_id_the_model_gave(self):
+        # Two parallel calls to the same tool are told apart by id; by name
+        # they are not.
+        adapter, captured = self.adapter_for(text="pronto")
+        results = ToolResults(
+            (
+                ToolResult("call_1", "erp-read_document", "{}"),
+                ToolResult("erp-read_document-0", "erp-read_document", "{}"),
+            )
+        )
+
+        self.complete(adapter, messages=[results])
+
+        parts = captured[0]["contents"][0]["parts"]
+        self.assertEqual(parts[0]["function_response"]["id"], "call_1")
+        # The synthetic id this adapter makes up is ours, not the model's:
+        # sending it back would be answering an id that was never issued.
+        self.assertNotIn("id", parts[1]["function_response"])
+
+    def test_thinking_tokens_are_counted_as_output(self):
+        # They are billed as output and reported apart. A turn that spends
+        # its whole budget thinking reports zero candidates and would cost
+        # nothing on paper.
+        adapter, _ = self.adapter_for(text="oi", usage=(100, 0, 0))
+        adapter._client.models.generate_content = lambda **kwargs: SimpleNamespace(
+            candidates=[SimpleNamespace(content=SimpleNamespace(parts=[SimpleNamespace(text="oi", function_call=None)]), finish_reason="STOP")],
+            usage_metadata=SimpleNamespace(
+                prompt_token_count=100, candidates_token_count=10,
+                cached_content_token_count=0, thoughts_token_count=2048,
+                tool_use_prompt_token_count=30,
+            ),
+        )
+
+        usage = self.complete(adapter).usage
+
+        self.assertEqual(usage.output_tokens, 10 + 2048)
+        self.assertEqual(usage.input_tokens, 100 + 30)
 
     def test_tools_travel_as_json_schema_with_automatic_calling_off(self):
         # Left on, the SDK would call our Python functions by itself, which is

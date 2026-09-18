@@ -161,9 +161,13 @@ class Intelligence8Agent:
                     trace_id=trace_id,
                 )
                 _circuit_breaker.record_success()
-            except LLMError as e:
+            except Exception as e:
+                # Anything, not only LLMError: what an adapter raises while
+                # reading a malformed answer must still count as a failure,
+                # or the breaker never learns that the provider is broken.
                 _circuit_breaker.record_failure()
-                frappe.log_error(str(e), "Intelligence8 LLM Error")
+                title = "Intelligence8 LLM Error" if isinstance(e, LLMError) else "Intelligence8 Agent Error"
+                frappe.log_error(str(e), title)
                 return {"status": "error", "message": str(e), "results": [], "text": ""}
 
             text_response += completion.text

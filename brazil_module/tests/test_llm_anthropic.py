@@ -73,6 +73,9 @@ class TestAnthropicProvider(ProviderContractTests, unittest.TestCase):
         kwargs.update(overrides)
         return adapter.complete(**kwargs)
 
+    def assert_replayed(self, payload, provider_state):
+        self.assertEqual(payload["messages"][1], {"role": "assistant", "content": list(provider_state)})
+
     # --- what is particular to the Anthropic wire format ---
 
     def test_sends_the_system_prompt_as_its_own_argument(self):
