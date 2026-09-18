@@ -60,9 +60,9 @@ the Google for Startups credits the company holds.
 ```python
 ToolCall(id, name, arguments)          # what the model asked for
 ToolResult(call_id, name, content)     # what we answered (name: Gemini needs it)
-AssistantTurn(text, tool_calls)        # a model turn in the transcript
-Usage(input_tokens, output_tokens, cached_input_tokens)
-Completion(text, tool_calls, usage, model, provider, wants_tools)
+AssistantTurn(text, tool_calls, provider_state)
+Usage(input_tokens, output_tokens, cached_input_tokens, cache_write_tokens)
+Completion(text, tool_calls, usage, model, provider, provider_state, wants_tools)
 LLMError(provider, status, message)    # every provider failure, one type
 
 class LLMProvider(Protocol):
@@ -70,6 +70,13 @@ class LLMProvider(Protocol):
     def complete(self, *, model, system, messages, tools=(),
                  max_tokens, timeout) -> Completion: ...
 ```
+
+`provider_state` is the provider's own version of a turn, kept opaque and replayed
+verbatim. Reasoning models keep state in it that the next turn is refused without:
+OpenAI answers 400 to a `function_call` whose reasoning item is missing, Gemini
+requires its thought signatures back unchanged, and Anthropic refuses thinking blocks
+that were dropped or reordered. Rebuilding a turn from its text and tool calls loses
+all three.
 
 `messages` is a sequence of neutral turns: a user string, an `AssistantTurn`, or a
 tuple of `ToolResult`. Tools keep today's shape (`name`, `description`,
@@ -133,7 +140,9 @@ timeouts into the new fields, and rewrite the registry rows. Old values map
 - An unknown model id is priced at the **most expensive known model of its provider**
   and logged. Today it silently bills at Sonnet rates, which under-reports; the
   budget gate must fail safe, not cheap.
-- I8 Cost Log gains `provider` and `cached_tokens`. Every call logs, including the
+- I8 Cost Log gains `provider`, `cached_tokens` and `cache_write_tokens`, and
+  `cost_usd` becomes a Float with nine decimals: as Currency it rounded every
+  fast-tier call to 0.00. Every call logs, including the
   orchestrator's router call, which today spends money without a record.
 
 ## Failures
@@ -143,8 +152,8 @@ rate-limited to one per hour per provider, so a scheduled job that stops working
 not fail silently. The briefing and the anomaly formatter keep their current
 fallbacks (raw text instead of formatted).
 
-A whitelisted `test_llm_connection()` with a button in the settings form makes a
-one-token call and reports what it got, so a wrong service-account JSON is found when
+A whitelisted connection check with a button in the settings form makes one cheap
+call and reports what it got, so a wrong service-account JSON is found when
 it is pasted, not at 08:00 the next morning.
 
 ## Testing
