@@ -29,6 +29,7 @@ This is a Frappe app (`brazil/`) with two modules:
 |---|---|
 | `brazil/brazil/services/fiscal/` | Fiscal service layer (XML parsing, SEFAZ client, processing pipeline) |
 | `brazil/brazil/services/banking/` | Banking service layer (Inter API, boleto, PIX, reconciliation) |
+| `brazil/brazil/services/intelligence/llm/` | Provider layer for the AI agent: one contract, three adapters (Anthropic, Google, OpenAI), pricing and cost |
 | `brazil/brazil/utils/` | Pure utility functions (CNPJ, chave de acesso, formatters, QR code) |
 | `brazil/brazil/fiscal/doctype/` | Fiscal DocType definitions (JSON + Python controllers) |
 | `brazil/brazil/bancos/doctype/` | Banking DocType definitions |

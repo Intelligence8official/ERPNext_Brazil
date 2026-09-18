@@ -656,8 +656,8 @@ def setup_module_registry():
         {
             "module_name": "fiscal",
             "description": "Nota Fiscal processing, NF-e/CT-e/NFS-e management, SEFAZ integration, supplier matching.",
-            "default_model": "sonnet",
-            "escalation_model": "opus",
+            "default_model": "standard",
+            "escalation_model": "deep",
             "context_prompt": (
                 "You are the Fiscal module. You handle Nota Fiscal processing:\n"
                 "- Receive and classify NF-e, CT-e, NFS-e documents\n"
@@ -682,8 +682,8 @@ def setup_module_registry():
         {
             "module_name": "p2p",
             "description": "Procure-to-Pay: Purchase Orders, recurring expenses, supplier management, PO creation.",
-            "default_model": "sonnet",
-            "escalation_model": "opus",
+            "default_model": "standard",
+            "escalation_model": "deep",
             "context_prompt": (
                 "You are the P2P (Procure-to-Pay) module. You handle:\n"
                 "- Creating Purchase Orders from recurring expenses\n"
@@ -704,8 +704,8 @@ def setup_module_registry():
         {
             "module_name": "banking",
             "description": "Banco Inter integration: payments, boletos, PIX, reconciliation, bank statements.",
-            "default_model": "sonnet",
-            "escalation_model": "opus",
+            "default_model": "standard",
+            "escalation_model": "deep",
             "context_prompt": (
                 "You are the Banking module. You handle:\n"
                 "- Creating and managing payments via Banco Inter\n"
@@ -728,8 +728,8 @@ def setup_module_registry():
         {
             "module_name": "email",
             "description": "Email classification, monitoring, and response. Classifies incoming emails by type.",
-            "default_model": "haiku",
-            "escalation_model": "sonnet",
+            "default_model": "fast",
+            "escalation_model": "standard",
             "context_prompt": (
                 "You are the Email module. You handle:\n"
                 "- Classifying incoming emails (FISCAL, COMMERCIAL, FINANCIAL, OPERATIONAL, SPAM)\n"
@@ -749,7 +749,7 @@ def setup_module_registry():
         {
             "module_name": "conversational",
             "description": "General conversation, ERP queries, reports, and ad-hoc requests from humans.",
-            "default_model": "sonnet",
+            "default_model": "standard",
             "escalation_model": "",
             "context_prompt": (
                 "You are the Conversational module. You handle:\n"

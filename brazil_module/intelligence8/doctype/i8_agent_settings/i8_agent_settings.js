@@ -18,6 +18,32 @@ frappe.ui.form.on("I8 Agent Settings", {
         _add_action(frm, "Schedule Weekly Payments", "brazil_module.api.i8_run_payment_scheduling",
             "Agendamento de pagamentos iniciado. Verifique o Telegram.");
 
+        // A wrong credential is invisible until a scheduled job fails at
+        // dawn; this asks the provider for one word, now.
+        frm.add_custom_button(__("Test LLM Connection"), function() {
+            frappe.call({
+                method: "brazil_module.api.i8_test_llm_connection",
+                freeze: true,
+                freeze_message: __("Perguntando ao provedor..."),
+                callback: function(r) {
+                    const res = r.message || {};
+                    if (res.status === "success") {
+                        frappe.msgprint({
+                            title: __("Provedor respondeu"),
+                            indicator: "green",
+                            message: __("{0} respondeu com {1}: {2}", [res.provider, res.model, res.answer]),
+                        });
+                    } else {
+                        frappe.msgprint({
+                            title: __("Provedor nao respondeu"),
+                            indicator: "red",
+                            message: res.message || __("Sem detalhes"),
+                        });
+                    }
+                },
+            });
+        }, __("Execute Now"));
+
         // ── View ──
         frm.add_custom_button(__("Execution Logs (Cost)"), function() {
             frappe.set_route("List", "I8 Cost Log");

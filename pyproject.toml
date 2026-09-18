@@ -16,6 +16,11 @@ dependencies = [
     "qrcode[pil]>=7.4.0",
     "Pillow>=10.0.0",
     "anthropic>=0.52.0",
+    # The other two providers of the LLM layer. Hard dependencies on purpose:
+    # the provider is switched from the desk, and a switch that needs a deploy
+    # to take effect is not a switch.
+    "google-genai>=2.24.0,<3.0.0",
+    "openai>=3.16.0,<4.0.0",
     "python-telegram-bot>=21.0",
 ]
 

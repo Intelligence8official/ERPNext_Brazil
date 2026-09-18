@@ -764,6 +764,14 @@ def i8_run_briefing():
 
 
 @frappe.whitelist()
+def i8_test_llm_connection():
+    """Ask the configured provider for one word, and report what came back."""
+    from brazil_module.services.intelligence.llm.check import check_connection
+
+    return check_connection()
+
+
+@frappe.whitelist()
 def i8_run_expense_scheduler():
     """Manually trigger the recurring expense scheduler."""
     frappe.enqueue(

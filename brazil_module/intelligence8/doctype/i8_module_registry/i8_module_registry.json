@@ -1,129 +1,129 @@
 {
-    "actions": [],
-    "allow_rename": 0,
-    "creation": "2026-03-25 10:00:00.000000",
-    "doctype": "DocType",
-    "engine": "InnoDB",
-    "field_order": [
-        "module_name",
-        "description",
-        "enabled",
-        "column_break",
-        "default_model",
-        "escalation_model",
-        "prompt_section",
-        "context_prompt",
-        "tools_section",
-        "read_tools",
-        "write_tools"
-    ],
-    "fields": [
-        {
-            "fieldname": "module_name",
-            "fieldtype": "Data",
-            "label": "Module Name",
-            "reqd": 1,
-            "in_list_view": 1,
-            "unique": 1
-        },
-        {
-            "fieldname": "description",
-            "fieldtype": "Small Text",
-            "label": "Description"
-        },
-        {
-            "default": "1",
-            "fieldname": "enabled",
-            "fieldtype": "Check",
-            "label": "Enabled",
-            "in_list_view": 1
-        },
-        {
-            "fieldname": "column_break",
-            "fieldtype": "Column Break"
-        },
-        {
-            "default": "sonnet",
-            "fieldname": "default_model",
-            "fieldtype": "Select",
-            "label": "Default Model",
-            "options": "haiku\nsonnet\nopus",
-            "in_list_view": 1
-        },
-        {
-            "fieldname": "escalation_model",
-            "fieldtype": "Select",
-            "label": "Escalation Model",
-            "options": "\nhaiku\nsonnet\nopus",
-            "description": "Retry model when first pass is uncertain"
-        },
-        {
-            "fieldname": "prompt_section",
-            "fieldtype": "Section Break",
-            "label": "Prompt"
-        },
-        {
-            "fieldname": "context_prompt",
-            "fieldtype": "Code",
-            "label": "Context Prompt",
-            "options": "text"
-        },
-        {
-            "fieldname": "tools_section",
-            "fieldtype": "Section Break",
-            "label": "Tools"
-        },
-        {
-            "fieldname": "read_tools",
-            "fieldtype": "Code",
-            "label": "Read Tools (JSON)",
-            "options": "JSON",
-            "description": "Auto-approved tools. JSON array of tool names/patterns."
-        },
-        {
-            "fieldname": "write_tools",
-            "fieldtype": "Code",
-            "label": "Write Tools (JSON)",
-            "options": "JSON",
-            "description": "Tools that go through Decision Engine. JSON array."
-        }
-    ],
-    "index_web_pages_for_search": 0,
-    "links": [],
-    "modified": "2026-03-28 10:00:00.000000",
-    "modified_by": "Administrator",
-    "module": "Intelligence8",
-    "name": "I8 Module Registry",
-    "naming_rule": "Random",
-    "owner": "Administrator",
-    "permissions": [
-        {
-            "create": 1,
-            "delete": 1,
-            "email": 1,
-            "print": 1,
-            "read": 1,
-            "role": "System Manager",
-            "share": 1,
-            "write": 1
-        },
-        {
-            "create": 1,
-            "delete": 1,
-            "email": 1,
-            "print": 1,
-            "read": 1,
-            "role": "Intelligence8 Admin",
-            "share": 1,
-            "write": 1
-        },
-        {
-            "read": 1,
-            "role": "Intelligence8 Viewer"
-        }
-    ],
-    "sort_field": "modified",
-    "sort_order": "DESC",
-    "states": [],
-    "track_changes": 1
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-03-25 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "module_name",
+  "description",
+  "enabled",
+  "column_break",
+  "default_model",
+  "escalation_model",
+  "prompt_section",
+  "context_prompt",
+  "tools_section",
+  "read_tools",
+  "write_tools"
+ ],
+ "fields": [
+  {
+   "fieldname": "module_name",
+   "fieldtype": "Data",
+   "label": "Module Name",
+   "reqd": 1,
+   "in_list_view": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "standard",
+   "fieldname": "default_model",
+   "fieldtype": "Select",
+   "label": "Default Tier",
+   "options": "fast\nstandard\ndeep",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "escalation_model",
+   "fieldtype": "Select",
+   "label": "Escalation Tier",
+   "options": "\nfast\nstandard\ndeep",
+   "description": "Retry model when first pass is uncertain"
+  },
+  {
+   "fieldname": "prompt_section",
+   "fieldtype": "Section Break",
+   "label": "Prompt"
+  },
+  {
+   "fieldname": "context_prompt",
+   "fieldtype": "Code",
+   "label": "Context Prompt",
+   "options": "text"
+  },
+  {
+   "fieldname": "tools_section",
+   "fieldtype": "Section Break",
+   "label": "Tools"
+  },
+  {
+   "fieldname": "read_tools",
+   "fieldtype": "Code",
+   "label": "Read Tools (JSON)",
+   "options": "JSON",
+   "description": "Auto-approved tools. JSON array of tool names/patterns."
+  },
+  {
+   "fieldname": "write_tools",
+   "fieldtype": "Code",
+   "label": "Write Tools (JSON)",
+   "options": "JSON",
+   "description": "Tools that go through Decision Engine. JSON array."
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-03-28 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Intelligence8",
+ "name": "I8 Module Registry",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Intelligence8 Admin",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Intelligence8 Viewer"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
 }
