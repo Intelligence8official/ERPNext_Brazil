@@ -11,38 +11,7 @@ frappe = sys.modules["frappe"]
 
 import unittest
 
-from brazil_module.services.intelligence.cost_tracker import CostTracker, calculate_cost_usd
-
-
-class TestCalculateCost(unittest.TestCase):
-    def test_haiku_cost(self):
-        cost = calculate_cost_usd("claude-haiku-4-5-20251001", tokens_in=1000, tokens_out=500)
-        expected = (1000 * 0.80 / 1_000_000) + (500 * 4.0 / 1_000_000)
-        self.assertAlmostEqual(cost, expected, places=6)
-
-    def test_sonnet_cost(self):
-        cost = calculate_cost_usd("claude-sonnet-4-6", tokens_in=1000, tokens_out=500)
-        expected = (1000 * 3.0 / 1_000_000) + (500 * 15.0 / 1_000_000)
-        self.assertAlmostEqual(cost, expected, places=6)
-
-    def test_opus_cost(self):
-        cost = calculate_cost_usd("claude-opus-4-6", tokens_in=1000, tokens_out=500)
-        expected = (1000 * 15.0 / 1_000_000) + (500 * 75.0 / 1_000_000)
-        self.assertAlmostEqual(cost, expected, places=6)
-
-    def test_unknown_model_uses_sonnet_rates(self):
-        cost = calculate_cost_usd("unknown-model", tokens_in=1000, tokens_out=500)
-        expected = (1000 * 3.0 / 1_000_000) + (500 * 15.0 / 1_000_000)
-        self.assertAlmostEqual(cost, expected, places=6)
-
-    def test_cached_input_discount(self):
-        cost = calculate_cost_usd("claude-sonnet-4-6", tokens_in=1000, tokens_out=500, cache_hit=True)
-        expected = (1000 * 0.30 / 1_000_000) + (500 * 15.0 / 1_000_000)
-        self.assertAlmostEqual(cost, expected, places=6)
-
-    def test_zero_tokens(self):
-        cost = calculate_cost_usd("claude-haiku-4-5-20251001", tokens_in=0, tokens_out=0)
-        self.assertEqual(cost, 0.0)
+from brazil_module.services.intelligence.cost_tracker import CostTracker
 
 
 class TestCostTrackerLog(unittest.TestCase):
@@ -54,28 +23,85 @@ class TestCostTrackerLog(unittest.TestCase):
     def test_log_creates_cost_log_entry(self):
         tracker = CostTracker()
         tracker.log(
+            provider="anthropic",
             model="claude-haiku-4-5-20251001",
             tokens_in=500, tokens_out=100, latency_ms=230,
-            module="p2p", function_name="create_po", cache_hit=False,
+            module="p2p", function_name="create_po",
         )
         frappe.new_doc.assert_called_once_with("I8 Cost Log")
         self.mock_doc.insert.assert_called_once_with(ignore_permissions=True)
 
-    def test_log_sets_correct_cost(self):
+    def test_the_price_follows_the_provider_that_answered(self):
+        # The same tokens cost different money depending on who ran them, and
+        # the old table priced every model as if it were Claude.
         tracker = CostTracker()
         tracker.log(
-            model="claude-haiku-4-5-20251001",
-            tokens_in=1000, tokens_out=500, latency_ms=100,
+            provider="google", model="gemini-3.8-flash",
+            tokens_in=1_000_000, tokens_out=0, latency_ms=100,
+            module="briefing", function_name="format",
+        )
+
+        self.assertAlmostEqual(self.mock_doc.cost_usd, 0.75, places=6)
+
+    def test_writes_down_who_answered(self):
+        tracker = CostTracker()
+        tracker.log(
+            provider="google", model="gemini-3.8-flash",
+            tokens_in=10, tokens_out=5, latency_ms=100,
+            module="briefing", function_name="format",
+        )
+
+        self.assertEqual(self.mock_doc.provider, "google")
+        self.assertEqual(self.mock_doc.model, "gemini-3.8-flash")
+
+    def test_cached_tokens_are_recorded_and_priced_apart(self):
+        tracker = CostTracker()
+        tracker.log(
+            provider="anthropic", model="claude-sonnet-5",
+            tokens_in=0, tokens_out=0, cached_tokens=1_000_000,
+            latency_ms=100, module="p2p", function_name="test",
+        )
+
+        self.assertEqual(self.mock_doc.cached_tokens, 1_000_000)
+        self.assertTrue(self.mock_doc.cache_hit)
+        self.assertAlmostEqual(self.mock_doc.cost_usd, 0.20, places=6)
+
+    def test_a_call_with_no_cache_is_not_marked_as_cached(self):
+        tracker = CostTracker()
+        tracker.log(
+            provider="anthropic", model="claude-sonnet-5",
+            tokens_in=10, tokens_out=5, latency_ms=100,
             module="p2p", function_name="test",
         )
-        expected = (1000 * 0.80 / 1_000_000) + (500 * 4.0 / 1_000_000)
-        self.assertAlmostEqual(self.mock_doc.cost_usd, expected, places=6)
+
+        self.assertFalse(self.mock_doc.cache_hit)
+
+    def test_keeps_the_trace_that_ties_a_call_to_its_flow(self):
+        # The field existed and was never written: a trace id was generated
+        # per event and thrown away.
+        tracker = CostTracker()
+        tracker.log(
+            provider="anthropic", model="claude-sonnet-5",
+            tokens_in=10, tokens_out=5, latency_ms=100,
+            module="p2p", function_name="test", trace_id="trace-123",
+        )
+
+        self.assertEqual(self.mock_doc.trace_id, "trace-123")
+
+    def test_defaults_to_anthropic_when_nobody_says_otherwise(self):
+        tracker = CostTracker()
+        tracker.log(
+            model="claude-sonnet-5", tokens_in=10, tokens_out=5,
+            latency_ms=100, module="p2p", function_name="test",
+        )
+
+        self.assertEqual(self.mock_doc.provider, "anthropic")
 
     def test_log_returns_doc_name(self):
         self.mock_doc.name = "COST-001"
         tracker = CostTracker()
         result = tracker.log(
-            model="claude-sonnet-4-6", tokens_in=100, tokens_out=50,
+            provider="anthropic", model="claude-sonnet-5", tokens_in=100, tokens_out=50,
             latency_ms=200, module="email", function_name="classify",
         )
         self.assertEqual(result, "COST-001")
