@@ -10,7 +10,7 @@ frappe.ui.form.on("Purchase Invoice", {
                         fieldname: "payment_type",
                         fieldtype: "Select",
                         label: __("Payment Type"),
-                        options: "PIX\nTED\nBoleto Payment",
+                        options: "PIX\nBoleto Payment",
                         reqd: 1,
                         default: "PIX",
                     },
@@ -45,10 +45,18 @@ frappe.ui.form.on("Purchase Invoice", {
                         },
                         freeze: true,
                         callback(r) {
-                            if (r.message && r.message.status === "success") {
+                            const result = r.message || {};
+                            if (result.status === "success") {
                                 d.hide();
-                                frappe.set_route("Form", "Inter Payment Order", r.message.payment_order);
+                                frappe.set_route("Form", "Inter Payment Order", result.payment_order);
+                                return;
                             }
+                            // The payment guards answer with a reason instead of raising.
+                            frappe.msgprint({
+                                title: __("Payment order not created"),
+                                indicator: "red",
+                                message: result.message || __("The payment order could not be created."),
+                            });
                         },
                     });
                 },
