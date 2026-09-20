@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, timedelta, time as dt_time
 
 import frappe
@@ -9,6 +10,16 @@ import frappe
 # off for the whole day.
 _BRIEFING_SENT_KEY = "i8_last_briefing_date"
 
+# Inter Payment Orders that still need a human (see _payment_orders_section).
+PAYMENT_ORDERS_TITLE = "*Pagamentos Inter — precisam de atencao:*"
+PAYMENT_ORDERS_PER_GROUP = 8
+_PAYMENT_ORDER_FIELDS = [
+    "name", "status", "amount", "bank_status", "bank_request_at", "modified", "purchase_invoice",
+]
+_IDLE_ORDER_STATUSES = ["Draft", "Pending Approval", "Approved"]
+_ONE_DAY = timedelta(hours=24)
+_PAYMENT_ORDER_LINE = re.compile(r"^\s+- (.+?): R\$ ", re.MULTILINE)  # a line of _payment_group_lines
+
 
 JARVIS_PERSONALITY = """You are I8Operator, the AI financial assistant for Intelligence8.
 Your personality: professional yet warm, subtly witty like the original JARVIS from Iron Man.
@@ -19,6 +30,8 @@ Rules:
 - Start with a warm greeting using the user's name and mention the day/date in Portuguese
 - Use a natural flow — don't just list items mechanically
 - Highlight what needs attention (overdue payments, pending approvals) with appropriate urgency
+- The "Pagamentos Inter" section is about real money that may be in flight: reproduce
+  every order of it (name, amount, status, age) exactly — never summarise, merge or drop one
 - For support tickets ("Chamados da Plataforma"), lead with the ones that have been
   waiting on us the longest, and flag any whose subject suggests the customer is
   blocked (login, payment, error, outage). Keep suggestions (Feature Requests) to one line
@@ -67,6 +80,8 @@ def scheduled_briefing():
         frappe.cache.set_value(
             _BRIEFING_SENT_KEY, today.strftime("%Y-%m-%d"), expires_in_sec=86400
         )
+        if formatted:
+            _send_payment_orders_left_out(formatted)
 
 
 def _is_briefing_time() -> bool:
@@ -119,6 +134,7 @@ def build_briefing() -> str:
         _bank_balance_section,
         _reconciliation_status_section,
         lambda: _payables_section(today, is_monday),
+        _payment_orders_section,
         _pending_actions_section,
         lambda: support_tickets_section(is_monday),
     ]
@@ -249,6 +265,140 @@ def _payables_section(today: date, is_monday: bool) -> str:
             lines.append("  Nenhum pagamento para hoje")
 
     return "\n".join(lines)
+
+
+def _payment_orders_section(now: datetime | None = None) -> str:
+    """Inter Payment Orders that still need a human - repeated every day, unlike a single alert.
+
+    Empty when there is nothing to report. A failure is reported IN the section instead of
+    raised: build_briefing() drops a section that raises, and a payment section that quietly
+    disappears reads as "nothing to worry about".
+    """
+    try:
+        moment = now or frappe.utils.now_datetime()
+        lines = []
+        for title, orders, describe in _payment_order_groups(moment):
+            lines += _payment_group_lines(title, orders, describe, moment)
+        return "\n".join([PAYMENT_ORDERS_TITLE, *lines]) if lines else ""
+    except Exception as e:
+        try:
+            frappe.log_error(str(e), "I8 Briefing Payment Orders Error")
+        except Exception:
+            # Writing the Error Log is a database write too: the section still has to come back.
+            pass
+        return f"{PAYMENT_ORDERS_TITLE}\n  Nao foi possivel ler as ordens de pagamento (ver Error Log)"
+
+
+def _send_payment_orders_left_out(formatted: str) -> None:
+    """Send the payment section verbatim when the formatted briefing lost one of its orders.
+
+    The briefing is rewritten by an LLM and the prompt is a request, not a guarantee. This is
+    the part that does not depend on it: every order named in the section must be named in
+    what was sent, or the section goes out again, untouched. Best effort - never raises.
+    """
+    try:
+        section = _payment_orders_section()
+        if section and not _carries_every_order(section, formatted):
+            _send_via_telegram(section)
+    except Exception as e:
+        try:
+            frappe.log_error(str(e), "I8 Briefing Payment Orders Error")
+        except Exception:
+            pass
+
+
+def _carries_every_order(section: str, formatted: str) -> bool:
+    """True when every order line of the section has its name, whole, in the formatted text."""
+    names = _PAYMENT_ORDER_LINE.findall(section)
+    if not names:  # "could not read the orders": nothing to match, so it is never assumed kept
+        return False
+    return all(re.search(rf"(?<![\w-]){re.escape(name)}(?![\w-])", formatted) for name in names)
+
+
+def _payment_order_groups(now: datetime) -> list:
+    """``(title, orders, describe)`` per group, most urgent first. Five queries, none per order."""
+    from brazil_module.services.banking.payment_guards import DOCTYPE
+
+    cutoff = now - _ONE_DAY
+
+    def read(filters: dict) -> list:
+        return frappe.get_all(DOCTYPE, filters=filters, fields=_PAYMENT_ORDER_FIELDS, order_by="modified asc")
+
+    # Every poll bumps `modified`: how long the bank has had an order is `bank_request_at`.
+    waiting = [
+        order for order in read({"docstatus": 1, "status": "Awaiting Bank"})
+        if _order_since(order) is None or _order_since(order) <= cutoff
+    ]
+    return [
+        ("Verificacao necessaria (o banco pode ter o pagamento)",
+         read({"docstatus": 1, "status": "Needs Verification"}), _describe_with_invoice),
+        ("Aguardando o banco ha mais de 24h", waiting, _describe_with_bank_status),
+        ("Falharam nas ultimas 24h",
+         read({"docstatus": 1, "status": "Failed", "modified": [">=", cutoff]}), _describe_failed),
+        ("Pagos sem Payment Entry (use Create Payment Entry na ordem)",
+         read({"docstatus": 1, "status": "Completed", "payment_entry": ["is", "not set"]}), _describe_failed),
+        ("Parados ha mais de 24h (bloqueiam a fatura)",
+         read({"docstatus": ["<", 2], "status": ["in", _IDLE_ORDER_STATUSES], "modified": ["<", cutoff]}),
+         _describe_with_status),
+    ]
+
+
+def _payment_group_lines(title: str, orders: list, describe, now: datetime) -> list:
+    """One group: its count, the oldest orders first, and how many were left out."""
+    if not orders:
+        return []
+    oldest_first = sorted(orders, key=lambda order: _order_since(order) or datetime.min)
+    lines = [f"  *{title}: {len(orders)}*"]
+    for order in oldest_first[:PAYMENT_ORDERS_PER_GROUP]:
+        amount = float(order.get("amount") or 0)
+        lines.append(f"    - {order.get('name')}: R$ {amount:,.2f}{describe(order, now)}")
+    if len(orders) > PAYMENT_ORDERS_PER_GROUP:
+        lines.append(f"    ... e mais {len(orders) - PAYMENT_ORDERS_PER_GROUP}")
+    return lines
+
+
+def _describe_with_invoice(order: dict, now: datetime) -> str:
+    invoice = order.get("purchase_invoice")
+    return f" — {_order_age(order, now)}{f' ({invoice})' if invoice else ''}"
+
+
+def _describe_with_bank_status(order: dict, now: datetime) -> str:
+    return f" — {order.get('bank_status') or 'sem status do banco'}, {_order_age(order, now)}"
+
+
+def _describe_failed(order: dict, now: datetime) -> str:
+    invoice = order.get("purchase_invoice")
+    return f" ({invoice})" if invoice else ""
+
+
+def _describe_with_status(order: dict, now: datetime) -> str:
+    return f" — {order.get('status')}, {_order_age(order, now)}"
+
+
+def _order_since(order: dict) -> datetime | None:
+    """When the bank received the order; before that (or without it), when it last changed."""
+    return _as_datetime(order.get("bank_request_at")) or _as_datetime(order.get("modified"))
+
+
+def _order_age(order: dict, now: datetime) -> str:
+    since = _order_since(order)
+    if since is None:
+        return "data desconhecida"
+    days = (now - since).days
+    if days <= 0:
+        return "hoje"
+    return "ha 1 dia" if days == 1 else f"ha {days} dias"
+
+
+def _as_datetime(value) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime.combine(value, dt_time())
+    try:
+        return datetime.fromisoformat(str(value)) if value else None
+    except ValueError:
+        return None
 
 
 def _pending_actions_section() -> str:

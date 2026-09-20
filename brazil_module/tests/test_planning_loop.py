@@ -1,7 +1,6 @@
 import sys
 import types as _types
-from datetime import date
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 if "frappe" not in sys.modules or not isinstance(sys.modules["frappe"], MagicMock):
     _fm = MagicMock()
@@ -10,6 +9,9 @@ if "frappe" not in sys.modules or not isinstance(sys.modules["frappe"], MagicMoc
     sys.modules["frappe.utils"] = _fm.utils
 
 frappe = sys.modules["frappe"]
+# planning_loop imports payment_guards (`from frappe.utils import flt`): register the submodule
+# even when another test module installed the mock without it (test_qrcode_gen.py does).
+sys.modules.setdefault("frappe.utils", frappe.utils)
 
 # Temporarily inject mocks for transitive imports, then restore afterwards
 # so other test files that import these modules get the real ones.
@@ -33,9 +35,12 @@ from brazil_module.services.intelligence.recurring.planning_loop import (
     process_pending_nfs,
 )
 
-# Keep references to the mocks we injected (needed for tests that patch them)
-_rec_mock = sys.modules["brazil_module.services.banking.reconciliation"]
-_tb_mock = sys.modules["brazil_module.services.intelligence.channels.telegram_bot"]
+# The mocks the tests put in sys.modules around each call (planning_loop imports both lazily).
+# Always dedicated MagicMocks: when another test module imported the real ones first, the entries
+# above are the REAL modules, and `_rec_mock.batch_reconcile = ...` would overwrite the real function
+# for the rest of the session while `_tb_mock.reset_mock()` would not exist at all.
+_rec_mock = MagicMock()
+_tb_mock = MagicMock()
 
 # Restore original modules so later test files get the real ones
 for _mod_key, (_was_present, _original) in _temp_mocks.items():
@@ -132,16 +137,26 @@ class TestCheckOverduePayments(unittest.TestCase):
         sys.modules.pop("brazil_module.services.intelligence.channels.telegram_bot", None)
 
     def test_alerts_on_overdue(self):
-        frappe.get_all.return_value = [
+        _tb_mock.reset_mock()
+        frappe.db.sql.return_value = [
             {"name": "PI-001", "supplier_name": "Test", "outstanding_amount": 5000},
         ]
-        frappe.utils.today.return_value = date.today().isoformat()
         check_overdue_payments()
-        # Should not raise
+        send_message = _tb_mock.TelegramBot.return_value.send_message
+        send_message.assert_called_once()
+        self.assertIn("PI-001", send_message.call_args.args[1])
 
     def test_no_alert_when_nothing_overdue(self):
-        frappe.get_all.return_value = []
+        _tb_mock.reset_mock()
+        frappe.db.sql.return_value = []
         check_overdue_payments()
+        _tb_mock.TelegramBot.return_value.send_message.assert_not_called()
+
+    def test_the_selection_ignores_orders_that_do_not_block(self):
+        check_overdue_payments()
+        statement = frappe.db.sql.call_args.args[0]
+        self.assertIn("NOT IN ('Failed', 'Cancelled')", statement)
+        self.assertIn("= 'Completed' AND IFNULL(ipo.payment_entry, '') != ''", statement)
 
 
 class TestProcessPendingNfs(unittest.TestCase):
