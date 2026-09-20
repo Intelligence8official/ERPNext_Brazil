@@ -42,9 +42,13 @@
         "result_section",
         "transaction_id",
         "approval_code",
+        "bank_status",
         "column_break_result",
         "execution_date",
+        "bank_request_at",
+        "idempotency_key",
         "inter_response",
+        "invoice_lock",
         "amended_from"
     ],
     "fields": [
@@ -60,11 +64,12 @@
             "fieldname": "status",
             "fieldtype": "Select",
             "label": "Status",
-            "options": "Draft\nPending Approval\nApproved\nProcessing\nCompleted\nFailed\nCancelled",
+            "options": "Draft\nPending Approval\nApproved\nProcessing\nAwaiting Bank\nNeeds Verification\nCompleted\nFailed\nCancelled",
             "default": "Draft",
             "in_list_view": 1,
             "in_standard_filter": 1,
-            "read_only": 1
+            "read_only": 1,
+            "no_copy": 1
         },
         {
             "fieldname": "payment_type",
@@ -122,7 +127,8 @@
             "fieldtype": "Link",
             "label": "Payment Entry",
             "options": "Payment Entry",
-            "read_only": 1
+            "read_only": 1,
+            "no_copy": 1
         },
         {
             "fieldname": "party_section",
@@ -222,7 +228,8 @@
         {
             "fieldname": "boleto_due_date",
             "fieldtype": "Date",
-            "label": "Boleto Due Date"
+            "label": "Boleto Due Date",
+            "mandatory_depends_on": "eval:doc.payment_type=='Boleto Payment'"
         },
         {
             "fieldname": "amount_section",
@@ -251,13 +258,25 @@
             "fieldname": "transaction_id",
             "fieldtype": "Data",
             "label": "Transaction ID",
-            "read_only": 1
+            "description": "The bank's reference of the settled payment (Pix: end-to-end id)",
+            "read_only": 1,
+            "no_copy": 1
         },
         {
             "fieldname": "approval_code",
             "fieldtype": "Data",
             "label": "Approval Code",
-            "read_only": 1
+            "description": "The bank's id for this request (codigoSolicitacao / codigoTransacao)",
+            "read_only": 1,
+            "no_copy": 1
+        },
+        {
+            "fieldname": "bank_status",
+            "fieldtype": "Data",
+            "label": "Bank Status",
+            "description": "Last status reported by Banco Inter",
+            "read_only": 1,
+            "no_copy": 1
         },
         {
             "fieldname": "column_break_result",
@@ -267,14 +286,43 @@
             "fieldname": "execution_date",
             "fieldtype": "Datetime",
             "label": "Execution Date",
-            "read_only": 1
+            "read_only": 1,
+            "no_copy": 1
+        },
+        {
+            "fieldname": "bank_request_at",
+            "fieldtype": "Datetime",
+            "label": "Bank Request At",
+            "description": "When the request was claimed for sending to the bank",
+            "read_only": 1,
+            "no_copy": 1
+        },
+        {
+            "fieldname": "idempotency_key",
+            "fieldtype": "Data",
+            "label": "Idempotency Key",
+            "read_only": 1,
+            "no_copy": 1
         },
         {
             "fieldname": "inter_response",
             "fieldtype": "Code",
             "label": "API Response",
             "options": "JSON",
-            "read_only": 1
+            "read_only": 1,
+            "no_copy": 1
+        },
+        {
+            "fieldname": "invoice_lock",
+            "fieldtype": "Data",
+            "label": "Invoice Lock",
+            "description": "Equals the Purchase Invoice while this order protects it; unique, so two blocking orders for one invoice cannot exist",
+            "hidden": 1,
+            "read_only": 1,
+            "no_copy": 1,
+            "unique": 1,
+            "print_hide": 1,
+            "report_hide": 1
         },
         {
             "fieldname": "amended_from",
@@ -288,7 +336,7 @@
     ],
     "index_web_pages_for_search": 0,
     "links": [],
-    "modified": "2026-02-09 00:00:00.000000",
+    "modified": "2026-09-20 12:00:00.000000",
     "modified_by": "Administrator",
     "module": "Bancos",
     "name": "Inter Payment Order",

@@ -122,16 +122,35 @@ class TestInterCompanyAccountValidation(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # InterPaymentOrder
 # ---------------------------------------------------------------------------
+# validate() only. The whitelisted methods are MagicMocks under this file's bare frappe mock
+# (``@frappe.whitelist()``); they are tested in test_inter_payment_order.py.
+import brazil_module.bancos.doctype.inter_payment_order.inter_payment_order as _ipo_mod
+
+
+class _Thrown(Exception):
+    """What frappe.throw raises here - an AttributeError must not pass for a validation error."""
+
+
 class TestInterPaymentOrderValidation(unittest.TestCase):
 
     def setUp(self):
         _reset()
+        frappe.throw.side_effect = _Thrown("thrown")
+        # `from frappe import _` / `from frappe.utils import flt` were bound at import time.
+        for name, value in (("_", lambda text: text), ("flt", lambda value, precision=None: float(value or 0))):
+            patcher = patch.object(_ipo_mod, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def tearDown(self):
         _reset()
 
     def _make_order(self, **overrides):
         o = InterPaymentOrder.__new__(InterPaymentOrder)
+        o.name = "IPO-2026-00001"
+        o.docstatus = 0
+        o.status = "Draft"
+        o.company = "Test Company"
         o.amount = 100.0
         o.payment_type = "PIX"
         o.pix_key = "email@test.com"
@@ -139,67 +158,77 @@ class TestInterPaymentOrderValidation(unittest.TestCase):
         o.recipient_agency = None
         o.recipient_account = None
         o.barcode = None
+        o.boleto_due_date = None
+        o.purchase_invoice = None
+        o.invoice_lock = None
         for k, v in overrides.items():
             setattr(o, k, v)
         return o
 
     def test_amount_must_be_positive(self):
         """Zero or negative amount throws."""
-        frappe.throw.side_effect = Exception("thrown")
-        o = self._make_order(amount=-10)
-        with self.assertRaises(Exception):
-            o.validate()
-        frappe.throw.assert_called_once()
+        for amount in (-10, 0, None):
+            with self.subTest(amount=amount):
+                frappe.throw.reset_mock()
+                o = self._make_order(amount=amount)
+                with self.assertRaises(_Thrown):
+                    o.validate()
+                frappe.throw.assert_called_once()
 
     def test_pix_requires_pix_key(self):
         """PIX payment without pix_key throws."""
-        frappe.throw.side_effect = Exception("thrown")
         o = self._make_order(payment_type="PIX", pix_key=None)
-        with self.assertRaises(Exception):
+        with self.assertRaises(_Thrown):
             o.validate()
         frappe.throw.assert_called_once()
 
-    def test_ted_requires_bank_code(self):
-        """TED without bank code throws."""
-        frappe.throw.side_effect = Exception("thrown")
-        o = self._make_order(
-            payment_type="TED",
-            pix_key=None,
-            recipient_bank_code=None,
-            recipient_agency="0001",
-            recipient_account="123456",
-        )
-        with self.assertRaises(Exception):
-            o.validate()
-        frappe.throw.assert_called_once()
-
-    def test_ted_requires_agency(self):
-        """TED without agency throws."""
-        frappe.throw.side_effect = Exception("thrown")
+    def test_ted_is_rejected(self):
+        """TED is rejected even with every TED field filled: the Banking API has no TED endpoint."""
         o = self._make_order(
             payment_type="TED",
             pix_key=None,
             recipient_bank_code="077",
-            recipient_agency=None,
+            recipient_agency="0001",
             recipient_account="123456",
         )
-        with self.assertRaises(Exception):
+        with self.assertRaises(_Thrown):
             o.validate()
         frappe.throw.assert_called_once()
+        self.assertIn("no TED endpoint", frappe.throw.call_args.args[0])
 
     def test_boleto_payment_requires_barcode(self):
         """Boleto Payment without barcode throws."""
-        frappe.throw.side_effect = Exception("thrown")
-        o = self._make_order(payment_type="Boleto Payment", pix_key=None, barcode=None)
-        with self.assertRaises(Exception):
+        o = self._make_order(payment_type="Boleto Payment", pix_key=None, barcode=None, boleto_due_date="2026-10-05")
+        with self.assertRaises(_Thrown):
             o.validate()
         frappe.throw.assert_called_once()
 
+    def test_boleto_payment_requires_due_date(self):
+        """Boleto Payment without boleto_due_date throws (the bank requires dataVencimento)."""
+        o = self._make_order(payment_type="Boleto Payment", pix_key=None, barcode="2379338128600000000031234")
+        with self.assertRaises(_Thrown):
+            o.validate()
+        frappe.throw.assert_called_once()
+        self.assertIn("Due Date", frappe.throw.call_args.args[0])
+
+    def test_boleto_barcode_normalised_to_digits(self):
+        """Dots and spaces of the linha digitavel are removed."""
+        o = self._make_order(
+            payment_type="Boleto Payment",
+            pix_key=None,
+            barcode="23793.38128 60000.000003",
+            boleto_due_date="2026-10-05",
+        )
+        o.validate()
+        self.assertEqual(o.barcode, "237933812860000000003")
+        frappe.throw.assert_not_called()
+
     def test_valid_pix_passes(self):
-        """Valid PIX order passes validation."""
-        o = self._make_order(payment_type="PIX", pix_key="email@test.com", amount=500)
+        """Valid PIX order passes validation and, without an invoice, takes no lock."""
+        o = self._make_order(payment_type="PIX", pix_key="email@test.com", amount=500, invoice_lock="")
         o.validate()
         frappe.throw.assert_not_called()
+        self.assertIsNone(o.invoice_lock)
 
 
 # ---------------------------------------------------------------------------

@@ -45,6 +45,7 @@ doc_events = {
     },
     "Payment Entry": {
         "on_submit": "brazil_module.services.banking.reconciliation.on_payment_entry_submit",
+        "on_cancel": "brazil_module.services.banking.payment_service.on_payment_entry_cancel",
     },
 }
 
