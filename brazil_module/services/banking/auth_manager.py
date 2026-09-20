@@ -5,7 +5,7 @@ Handles token acquisition, caching, refresh, and certificate path resolution.
 """
 
 import os
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta
 
 import frappe
 import requests
@@ -110,16 +110,30 @@ class InterAuthManager:
             return TOKEN_URL_PRODUCTION
         return TOKEN_URL_SANDBOX
 
-    def get_valid_token(self, scopes: list[str] | None = None) -> str:
+    def get_valid_token(self, scopes: list[str] | None = None, force_refresh: bool = False) -> str:
         """Get a valid OAuth2 access token, using cache or requesting a new one.
 
         Args:
             scopes: OAuth2 scopes to request. Defaults to all scopes.
+            force_refresh: Ignore the cached token and request a new one. Used
+                after the bank answered HTTP 401 to a token the cache still
+                considers valid.
 
         Returns:
             Valid access token string.
         """
-        # Check cached token
+        if not force_refresh:
+            cached_token = self._get_cached_token()
+            if cached_token:
+                return cached_token
+
+        # Request new token
+        token_data = self._request_new_token(scopes or DEFAULT_SCOPES)
+        self._cache_token(token_data["access_token"], token_data["expires_in"])
+        return token_data["access_token"]
+
+    def _get_cached_token(self) -> str | None:
+        """Return the cached token while it is outside the refresh buffer."""
         cached_token = self.account_doc.access_token
         token_expiry = self.account_doc.token_expiry
 
@@ -131,10 +145,7 @@ class InterAuthManager:
             if now + buffer < expiry_dt:
                 return cached_token
 
-        # Request new token
-        token_data = self._request_new_token(scopes or DEFAULT_SCOPES)
-        self._cache_token(token_data["access_token"], token_data["expires_in"])
-        return token_data["access_token"]
+        return None
 
     def _request_new_token(self, scopes: list[str]) -> dict:
         """Request a new OAuth2 token from Banco Inter.
