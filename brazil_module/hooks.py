@@ -95,6 +95,8 @@ scheduler_events = {
         ],
     },
     "daily": [
+        # Telegram never says the webhook broke; this is what asks.
+        "brazil_module.services.intelligence.channels.telegram_health.scheduled_check",
         "brazil_module.services.fiscal.processor.cleanup_old_logs",
         "brazil_module.services.banking.statement_sync.daily_balance_update",
         "brazil_module.services.banking.boleto_service.cancel_expired_boletos",

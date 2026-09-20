@@ -45,6 +45,8 @@
   "column_break_telegram",
   "telegram_chat_id",
   "telegram_users",
+  "telegram_webhook_status",
+  "telegram_webhook_checked_on",
   "budget_section",
   "daily_budget_usd",
   "monthly_budget_usd",
@@ -315,6 +317,19 @@
    "fieldtype": "Table",
    "label": "Telegram Users",
    "options": "I8 Telegram User"
+  },
+  {
+   "fieldname": "telegram_webhook_status",
+   "fieldtype": "Small Text",
+   "label": "Webhook Status",
+   "read_only": 1,
+   "description": "A bot token does not expire. What can break is delivery, and this is the last verdict on it."
+  },
+  {
+   "fieldname": "telegram_webhook_checked_on",
+   "fieldtype": "Datetime",
+   "label": "Webhook Checked On",
+   "read_only": 1
   },
   {
    "fieldname": "budget_section",

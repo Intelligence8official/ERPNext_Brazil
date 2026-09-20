@@ -18,6 +18,58 @@ frappe.ui.form.on("I8 Agent Settings", {
         _add_action(frm, "Schedule Weekly Payments", "brazil_module.api.i8_run_payment_scheduling",
             "Agendamento de pagamentos iniciado. Verifique o Telegram.");
 
+        frm.add_custom_button(__("Test Telegram Connection"), function() {
+            frappe.call({
+                method: "brazil_module.api.i8_check_telegram_webhook",
+                freeze: true,
+                freeze_message: __("Perguntando ao Telegram..."),
+                callback: function(r) {
+                    const s = r.message || {};
+                    const lines = [
+                        __("Bot: {0}", [s.bot ? "@" + s.bot : __("desconhecido")]),
+                        __("Webhook: {0}", [s.url || __("nenhum registrado")]),
+                        __("Fila: {0}", [s.pending]),
+                    ];
+                    if (!s.healthy) {
+                        lines.push("");
+                        lines.push(__("Problema: {0}", [s.problem]));
+                        if (s.fixable) {
+                            lines.push(__("O botao Register Telegram Webhook resolve isto."));
+                        }
+                    }
+                    frappe.msgprint({
+                        title: s.healthy ? __("Telegram entregando") : __("Telegram com problema"),
+                        indicator: s.healthy ? "green" : "red",
+                        message: lines.join("<br>"),
+                    });
+                    frm.reload_doc();
+                },
+            });
+        }, __("Execute Now"));
+
+        // Repointing delivery and minting a new secret: worth a confirmation.
+        frm.add_custom_button(__("Register Telegram Webhook"), function() {
+            frappe.confirm(
+                __("Isto aponta o Telegram para este site e troca o segredo do webhook. Continuar?"),
+                function() {
+                    frappe.call({
+                        method: "brazil_module.api.i8_register_telegram_webhook",
+                        freeze: true,
+                        freeze_message: __("Registrando no Telegram..."),
+                        callback: function(r) {
+                            const res = r.message || {};
+                            frappe.msgprint({
+                                title: res.ok ? __("Webhook registrado") : __("Nao foi possivel registrar"),
+                                indicator: res.ok ? "green" : "red",
+                                message: res.ok ? (res.url || "") : (res.message || __("Sem detalhes")),
+                            });
+                            frm.reload_doc();
+                        },
+                    });
+                }
+            );
+        }, __("Execute Now"));
+
         // A wrong credential is invisible until a scheduled job fails at
         // dawn; this asks the provider for one word, now.
         frm.add_custom_button(__("Test LLM Connection"), function() {

@@ -775,6 +775,25 @@ def i8_test_llm_connection():
 
 
 @frappe.whitelist()
+def i8_check_telegram_webhook():
+    """Ask Telegram who the bot is and how delivery is going."""
+    from brazil_module.services.intelligence.channels.telegram_health import check
+
+    return check()
+
+
+@frappe.whitelist()
+def i8_register_telegram_webhook():
+    """Point Telegram at this site, with a freshly minted secret."""
+    # Rotating the secret and repointing delivery is configuration, not a read.
+    frappe.only_for("System Manager")
+
+    from brazil_module.services.intelligence.channels.telegram_health import register_webhook
+
+    return register_webhook(rotate_secret=True)
+
+
+@frappe.whitelist()
 def i8_run_expense_scheduler():
     """Manually trigger the recurring expense scheduler."""
     frappe.enqueue(
