@@ -3,10 +3,23 @@
 // The form never decides anything about money: every button reloads the document, re-checks the
 // status and calls a controller method, which re-reads the database row. See
 // docs/superpowers/specs/2026-09-20-inter-payment-safety-design.md (section 4.3).
+//
+// It also never tells the operator something it does not know. After an incident that duplicated
+// payments, the person reading this form is deciding whether money left the account: a hopeful
+// message here is worse than no message at all.
 
 const IPO_MANAGER_ROLES = ["Banco Inter Manager", "System Manager"];
 const IPO_RELOAD_AFTER_EXECUTE_MS = 4000;
 const IPO_NOT_PAID_CHECKS = ["not_in_statement", "not_in_approval_queue", "not_in_scheduled_payments"];
+// What the operator says they looked at, recorded with the note so the timeline keeps the attestation.
+const IPO_NOT_PAID_CHECK_LABELS = ["statement", "approval queue", "scheduled payments"];
+
+// Keep equal to CANCELLABLE_STATUSES in payment_guards.py: the server refuses anything else.
+const IPO_CANCELLABLE_STATUSES = ["Draft", "Pending Approval", "Approved", "Failed"];
+
+// Answers of poll_bank_status in which the bank really spoke about this order. Anything else
+// (blocked, error, no_bank_id, skipped, or a status added later) must not claim a fresh answer.
+const IPO_BANK_ANSWERED = ["awaiting_bank", "completed", "failed", "needs_verification", "unchanged"];
 
 // Keep equal to the map in inter_payment_order_list.js.
 const IPO_STATUS_COLORS = {
@@ -27,6 +40,7 @@ frappe.ui.form.on("Inter Payment Order", {
             frm.page.set_indicator(__(frm.doc.status), IPO_STATUS_COLORS[frm.doc.status]);
         }
         if (frm.doc.docstatus === 1) {
+            ipo_hide_cancel_when_the_server_would_refuse(frm);
             ipo_show_status_intro(frm);
             ipo_add_status_buttons(frm);
         }
@@ -79,29 +93,70 @@ frappe.ui.form.on("Inter Payment Order", {
 // the order) and frm.call sends the whole document: reload first, re-check, only then call.
 // Resolves to undefined when nothing was called, otherwise to {message}.
 async function call_on_fresh_doc(frm, expected_statuses, method, args, reload_delay_ms) {
-    await frm.reload_doc();
-    if (frm.doc.docstatus !== 1 || !expected_statuses.includes(frm.doc.status)) {
-        frappe.msgprint(__("This payment order is now '{0}'. Nothing was done.", [__(frm.doc.status)]));
-        return undefined;
+    if (frm.__ipo_busy) {
+        return undefined;  // a second click while the first call is still in flight
     }
+    frm.__ipo_busy = true;
+    // The desk keeps ONE Form object per doctype, so frm.doc after an await is whatever document
+    // is open by then - not necessarily the one the operator acted on.
+    const acted_on = frm.doc.name;
     try {
-        const r = await frm.call(method, args || {});
+        await frm.reload_doc();
+        if (frm.doc.name !== acted_on) {
+            frappe.msgprint(__("You moved to another payment order. Nothing was done."));
+            return undefined;
+        }
+        if (frm.doc.docstatus !== 1 || !expected_statuses.includes(frm.doc.status)) {
+            frappe.msgprint(__("This payment order is now '{0}'. Nothing was done.", [__(frm.doc.status)]));
+            return undefined;
+        }
+        const r = await frm.call({
+            method: method,
+            doc: frm.doc,
+            args: args || {},
+            freeze: true,
+            freeze_message: __("Talking to Banco Inter..."),
+        });
         return { message: r ? r.message : null };
     } catch (error) {
         // frappe.call already showed the server's message; keep the trace for support.
         console.error(`Inter Payment Order: ${method} failed`, error);
         return undefined;
     } finally {
-        if (reload_delay_ms) {
-            setTimeout(() => frm.reload_doc(), reload_delay_ms);
-        } else {
+        frm.__ipo_busy = false;
+        ipo_reload_when_still_here(frm, acted_on, reload_delay_ms);
+    }
+}
+
+// Never reload over another document or over unsaved edits: by the time this runs the operator may
+// have navigated away.
+function ipo_reload_when_still_here(frm, acted_on, delay_ms) {
+    const reload = () => {
+        if (frm.doc.name === acted_on && !frm.is_dirty()) {
             frm.reload_doc();
         }
+    };
+    if (delay_ms) {
+        setTimeout(reload, delay_ms);
+    } else {
+        reload();
     }
 }
 
 function ipo_is_manager() {
     return IPO_MANAGER_ROLES.some((role) => frappe.user.has_role(role));
+}
+
+// Every action here is a document method on a submitted document, and Frappe checks the submit
+// permission for those - so offering them to a reader only produces a refusal.
+function ipo_may_act(frm) {
+    return frm.has_perm("submit");
+}
+
+function ipo_hide_cancel_when_the_server_would_refuse(frm) {
+    if (!IPO_CANCELLABLE_STATUSES.includes(frm.doc.status)) {
+        frm.page.clear_secondary_action();
+    }
 }
 
 function ipo_show_status_intro(frm) {
@@ -117,7 +172,8 @@ function ipo_show_status_intro(frm) {
     } else if (frm.doc.status === "Awaiting Bank") {
         frm.set_intro(
             __("The bank accepted this request (bank status: {0}). It is settled only when the bank reports it as paid.", [
-                frm.doc.bank_status || "-",
+                // Straight from the bank's JSON, and set_intro renders HTML.
+                frappe.utils.escape_html(frm.doc.bank_status || "-"),
             ]),
             "blue"
         );
@@ -130,6 +186,9 @@ function ipo_show_status_intro(frm) {
 }
 
 function ipo_add_status_buttons(frm) {
+    if (!ipo_may_act(frm)) {
+        return;
+    }
     const status = frm.doc.status;
     const group = __("Actions");
 
@@ -173,9 +232,26 @@ function ipo_confirm_execution(frm) {
 
 async function ipo_check_bank_status(frm) {
     const result = await call_on_fresh_doc(frm, ["Awaiting Bank"], "check_bank_status");
-    if (result) {
-        frappe.show_alert({ message: __("The bank was asked. The form shows the current status."), indicator: "blue" });
+    if (!result) {
+        return;
     }
+    const outcome = result.message || {};
+    if (!IPO_BANK_ANSWERED.includes(outcome.status)) {
+        // Disabled integration, a refused or failed request, no bank id: the status on screen is
+        // the OLD one and saying otherwise would send the operator to the wrong conclusion.
+        frappe.msgprint({
+            title: __("The bank status was NOT updated"),
+            indicator: "orange",
+            message: frappe.utils.escape_html(outcome.message || outcome.status || "-"),
+        });
+        return;
+    }
+    frappe.show_alert({
+        message: outcome.message
+            ? frappe.utils.escape_html(outcome.message)
+            : __("The bank was asked. The form shows the current status."),
+        indicator: "blue",
+    });
 }
 
 async function ipo_create_payment_entry(frm) {
@@ -260,24 +336,50 @@ function ipo_resolve_problem(values) {
     return null;
 }
 
+// not_paid is the only outcome that frees the invoice, and it rests on what a person swears they
+// looked at. The checkboxes live in the browser, so carry them into the note: the timeline is
+// where this attestation has to survive.
+function ipo_resolve_note(values) {
+    const note = (values.note || "").trim();
+    if (values.outcome !== "not_paid") {
+        return note;
+    }
+    return `Checked at the bank, not there: ${IPO_NOT_PAID_CHECK_LABELS.join(", ")}. ${note}`;
+}
+
 function ipo_resolve_dialog(frm) {
+    let running = false;
     const dialog = new frappe.ui.Dialog({
         title: __("Resolve Verification"),
         fields: ipo_resolve_fields(frm),
         primary_action_label: __("Resolve"),
         primary_action: async (values) => {
+            if (running) {
+                return;
+            }
             const problem = ipo_resolve_problem(values);
             if (problem) {
                 frappe.msgprint(problem);
                 return;
             }
-            dialog.hide();
-            await call_on_fresh_doc(frm, ["Needs Verification"], "resolve_verification", {
-                outcome: values.outcome,
-                bank_reference: (values.bank_reference || "").trim(),
-                paid_on: values.paid_on || null,
-                note: (values.note || "").trim(),
-            });
+            running = true;
+            dialog.disable_primary_action();
+            try {
+                const result = await call_on_fresh_doc(frm, ["Needs Verification"], "resolve_verification", {
+                    outcome: values.outcome,
+                    bank_reference: (values.bank_reference || "").trim(),
+                    paid_on: values.paid_on || null,
+                    note: ipo_resolve_note(values),
+                });
+                // Only on success: a refusal (future date, reference already used) must keep the
+                // dialog open with what the operator typed.
+                if (result) {
+                    dialog.hide();
+                }
+            } finally {
+                running = false;
+                dialog.enable_primary_action();
+            }
         },
     });
     dialog.show();
