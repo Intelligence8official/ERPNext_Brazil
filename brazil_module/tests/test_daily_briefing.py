@@ -1,6 +1,6 @@
 import sys
 import types as _types
-from datetime import date, datetime
+from datetime import date, datetime, time as dt_time, timedelta
 from unittest.mock import MagicMock, patch
 
 if "frappe" not in sys.modules or not isinstance(sys.modules["frappe"], MagicMock):
@@ -23,6 +23,7 @@ import unittest
 from brazil_module.services.intelligence.recurring.daily_briefing import (
     build_briefing,
     scheduled_briefing,
+    send_briefing_now,
     _is_briefing_time,
     _bank_balance_section,
     _payables_section,
@@ -38,6 +39,9 @@ if not _tb_was_present:
     sys.modules.pop(_tb_key, None)
 elif _tb_original is not None:
     sys.modules[_tb_key] = _tb_original
+
+
+_DB = "brazil_module.services.intelligence.recurring.daily_briefing"
 
 
 class TestScheduledBriefing(unittest.TestCase):
@@ -101,11 +105,122 @@ class TestIsBriefingTime(unittest.TestCase):
         self.assertFalse(_is_briefing_time())
 
     @patch("brazil_module.services.intelligence.recurring.daily_briefing.datetime")
+    def test_a_configured_time_arrives_as_a_timedelta(self, mock_dt):
+        """What production actually hands over.
+
+        briefing_time is a Time field and Frappe casts Time to timedelta, never to the string the
+        window check used to split. While the field was empty the fallback string worked, which is
+        why the briefing ran until the day an hour was configured - and then every tick raised.
+        """
+        frappe.db.get_single_value.return_value = timedelta(hours=4)
+        frappe.cache.get_value.return_value = None
+
+        mock_dt.now.return_value = datetime(2026, 9, 21, 4, 5, 0)
+        self.assertTrue(_is_briefing_time())
+
+        mock_dt.now.return_value = datetime(2026, 9, 21, 18, 4, 0)
+        self.assertFalse(_is_briefing_time())
+
+    @patch("brazil_module.services.intelligence.recurring.daily_briefing.datetime")
+    def test_a_time_object_is_understood_too(self, mock_dt):
+        frappe.db.get_single_value.return_value = dt_time(9, 30)
+        frappe.cache.get_value.return_value = None
+        mock_dt.now.return_value = datetime(2026, 5, 27, 9, 35, 0)
+
+        self.assertTrue(_is_briefing_time())
+
+    @patch("brazil_module.services.intelligence.recurring.daily_briefing.datetime")
+    def test_an_unreadable_time_falls_back_instead_of_killing_the_job(self, mock_dt):
+        """Whatever happens here, it must not take the scheduled job down every fifteen minutes."""
+        frappe.db.get_single_value.return_value = object()
+        frappe.cache.get_value.return_value = None
+        mock_dt.now.return_value = datetime(2026, 5, 27, 8, 10, 0)
+
+        self.assertTrue(_is_briefing_time())
+
+    @patch("brazil_module.services.intelligence.recurring.daily_briefing.datetime")
     def test_defaults_to_0800_when_no_config(self, mock_dt):
         frappe.db.get_single_value.return_value = None
         frappe.cache.get_value.return_value = None
         mock_dt.now.return_value = datetime(2026, 5, 27, 8, 10, 0)
         self.assertTrue(_is_briefing_time())
+
+
+class TestSendBriefingNow(unittest.TestCase):
+    """The button. It must send whatever the clock says, and report what really happened."""
+
+    def setUp(self):
+        frappe.reset_mock()
+        frappe.db.get_single_value.side_effect = None
+        frappe.db.get_single_value.return_value = timedelta(hours=4)
+        frappe.db.count.return_value = 0
+        frappe.get_all.side_effect = None
+        frappe.get_all.return_value = []
+        frappe.db.sql.return_value = []
+        frappe.utils.now_datetime.side_effect = None
+        frappe.utils.now_datetime.return_value = datetime(2026, 9, 21, 18, 4, 0)
+        # Already sent today, and 18:04 is nowhere near the configured 04:00.
+        frappe.cache.get_value.return_value = date.today().strftime("%Y-%m-%d")
+
+    @patch(f"{_DB}._send_payment_orders_left_out")
+    @patch(f"{_DB}._format_with_jarvis", return_value="briefing formatado")
+    @patch(f"{_DB}._send_via_telegram", return_value=True)
+    def test_it_sends_outside_the_window_and_says_so(self, send, _fmt, _left_out):
+        result = send_briefing_now()
+
+        send.assert_called_once()
+        self.assertEqual(result["status"], "sent")
+        self.assertIn("Telegram", result["message"])
+
+    @patch(f"{_DB}._send_payment_orders_left_out")
+    @patch(f"{_DB}._format_with_jarvis", return_value="briefing formatado")
+    @patch(f"{_DB}._send_via_telegram", return_value=True)
+    def test_it_does_not_consume_the_day_marker(self, _send, _fmt, _left_out):
+        """A briefing asked for by hand must not suppress tomorrow's scheduled one."""
+        send_briefing_now()
+
+        marks = [c for c in frappe.cache.set_value.call_args_list
+                 if c.args and c.args[0] == "i8_last_briefing_date"]
+        self.assertEqual(marks, [])
+
+    @patch(f"{_DB}._format_with_jarvis", return_value="briefing formatado")
+    @patch(f"{_DB}._send_via_telegram", return_value=False)
+    def test_a_refused_send_is_reported_as_an_error(self, _send, _fmt):
+        result = send_briefing_now()
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("telegram_chat_id", result["message"])
+
+    @patch(f"{_DB}._format_with_jarvis", side_effect=RuntimeError("o provedor caiu"))
+    def test_a_failure_is_reported_instead_of_raising(self, _fmt):
+        result = send_briefing_now()
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("o provedor caiu", result["message"])
+
+
+class TestTheEndpointDoesNotQueue(unittest.TestCase):
+    """Read from the source: importing the api module here would need its whitelist shim."""
+
+    def test_the_button_endpoint_sends_instead_of_queueing(self):
+        import ast
+        import os
+
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "api", "__init__.py"
+        )
+        with open(path, encoding="utf-8") as handle:
+            tree = ast.parse(handle.read())
+        function = next(
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == "i8_run_briefing"
+        )
+        calls = {
+            ast.unparse(node.func) for node in ast.walk(function) if isinstance(node, ast.Call)
+        }
+
+        self.assertIn("send_briefing_now", calls)
+        self.assertNotIn("frappe.enqueue", calls, "queueing the scheduled job re-adds the window")
 
 
 class TestBuildBriefing(unittest.TestCase):
@@ -365,7 +480,6 @@ class TestReconciliationStatusSection(unittest.TestCase):
         self.assertIn("3 transacoes pendentes", result)
 
 
-_DB = "brazil_module.services.intelligence.recurring.daily_briefing"
 
 
 class TestBriefingDedupLatch(unittest.TestCase):

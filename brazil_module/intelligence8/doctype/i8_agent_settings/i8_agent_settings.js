@@ -4,7 +4,7 @@ frappe.ui.form.on("I8 Agent Settings", {
 
         // ── Execute Now ──
         _add_action(frm, "Run Daily Briefing", "brazil_module.api.i8_run_briefing",
-            "Daily Briefing enviado ao Telegram.");
+            "Briefing solicitado.");
 
         _add_action(frm, "Run Expense Scheduler", "brazil_module.api.i8_run_expense_scheduler",
             "Expense scheduler executado. Verifique o Telegram.");
@@ -123,9 +123,15 @@ function _add_action(frm, label, method, success_msg) {
             freeze: true,
             freeze_message: __("Executando " + label + "..."),
             callback: function(r) {
-                if (r.message && r.message.status === "queued") {
-                    frappe.show_alert({message: __(success_msg), indicator: "green"}, 5);
-                }
+                // Say what came back, not what we hoped for: these endpoints answer
+                // {status, message}, and one of them used to report "sent" for a briefing that
+                // had only been queued - and then dropped, outside its configured window.
+                const out = r.message || {};
+                const ok = out.status === "queued" || out.status === "sent";
+                frappe.show_alert({
+                    message: out.message ? frappe.utils.escape_html(out.message) : __(success_msg),
+                    indicator: ok ? "green" : "orange",
+                }, 7);
             },
             error: function(r) {
                 frappe.show_alert({message: __("Erro ao executar " + label), indicator: "red"}, 5);

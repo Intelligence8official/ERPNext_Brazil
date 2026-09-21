@@ -62,13 +62,7 @@ def scheduled_briefing():
 
     today = date.today()
     try:
-        raw_data = build_briefing()
-        user_name = _get_user_first_name()
-        buttons = _build_briefing_buttons(today)
-
-        # Use LLM to format the briefing with JARVIS personality
-        formatted = _format_with_jarvis(raw_data, user_name, today)
-        sent = _send_via_telegram(formatted or raw_data, buttons)
+        sent, formatted = _compose_and_send()
     except Exception as e:
         # Do NOT mark as sent: leaving the dedup unset lets the next */15 tick
         # retry, instead of latching the briefing off for the whole day.
@@ -84,6 +78,62 @@ def scheduled_briefing():
             _send_payment_orders_left_out(formatted)
 
 
+def _briefing_target() -> tuple[int, int]:
+    """The configured hour and minute of the briefing.
+
+    ``briefing_time`` is a Time field, and Frappe casts Time to ``timedelta`` - never to the string
+    this used to split. While the field was empty the fallback string worked, which is why the
+    briefing ran until the day an hour was actually configured: from then on every tick raised
+    AttributeError, outside the try that guards the rest, and the job died every fifteen minutes.
+    """
+    value = frappe.db.get_single_value("I8 Agent Settings", "briefing_time")
+    try:
+        # str() is the whole fix: a timedelta prints as "4:00:00" and a time as "09:30:00", both
+        # of which split cleanly. The old code split the object itself.
+        parts = str(value or "08:00:00").split(":")
+        return int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
+    except (TypeError, ValueError):
+        # Whatever is in there, it must not take the scheduled job down forever.
+        try:
+            frappe.log_error(title="I8 Briefing Time", message=f"briefing_time ilegivel: {value!r}")
+        except Exception:
+            pass
+        return 8, 0
+
+
+def _compose_and_send() -> tuple[bool, str]:
+    """Build the briefing and hand it to Telegram. Returns ``(sent, formatted)``."""
+    today = date.today()
+    raw_data = build_briefing()
+    user_name = _get_user_first_name()
+    buttons = _build_briefing_buttons(today)
+    # Use LLM to format the briefing with JARVIS personality
+    formatted = _format_with_jarvis(raw_data, user_name, today)
+    return _send_via_telegram(formatted or raw_data, buttons), formatted
+
+
+def send_briefing_now() -> dict:
+    """Send the briefing this instant, whatever the clock says, and report what happened.
+
+    The button in the settings form used to queue the scheduled job, which begins by checking the
+    configured window and whether today's briefing already went out. Pressed at any other hour it
+    therefore did nothing at all - while the form announced that the briefing had been sent.
+    """
+    try:
+        sent, formatted = _compose_and_send()
+    except Exception as e:
+        frappe.log_error(title="I8 Daily Briefing Error", message=str(e))
+        return {"status": "error", "message": f"O briefing falhou: {e}"}
+    if not sent:
+        return {
+            "status": "error",
+            "message": "O Telegram nao aceitou a mensagem. Confira telegram_chat_id e o Error Log.",
+        }
+    if formatted:
+        _send_payment_orders_left_out(formatted)
+    return {"status": "sent", "message": "Briefing enviado ao Telegram."}
+
+
 def _is_briefing_time() -> bool:
     """Return True if now is within the 15-minute window after the configured
     briefing_time AND the briefing has not already been sent today.
@@ -92,12 +142,7 @@ def _is_briefing_time() -> bool:
     written by scheduled_briefing() only after a successful send, so a failed
     send is retried on the next scheduler tick rather than suppressed for 24h.
     """
-    briefing_time_str = frappe.db.get_single_value("I8 Agent Settings", "briefing_time") or "08:00:00"
-
-    # Parse configured time
-    parts = briefing_time_str.split(":")
-    target_hour = int(parts[0])
-    target_minute = int(parts[1]) if len(parts) > 1 else 0
+    target_hour, target_minute = _briefing_target()
 
     now = datetime.now()
     target = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)

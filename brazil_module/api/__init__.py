@@ -798,12 +798,14 @@ def i8_dashboard_data():
 
 @frappe.whitelist()
 def i8_run_briefing():
-    """Manually trigger the daily briefing."""
-    frappe.enqueue(
-        "brazil_module.services.intelligence.recurring.daily_briefing.scheduled_briefing",
-        queue="short",
-    )
-    return {"status": "queued"}
+    """Send the briefing now and report what happened.
+
+    Not the scheduled job: that one starts by checking the configured window and today's marker,
+    so pressed at any other hour it did nothing while the form said otherwise.
+    """
+    from brazil_module.services.intelligence.recurring.daily_briefing import send_briefing_now
+
+    return send_briefing_now()
 
 
 @frappe.whitelist()
