@@ -26,8 +26,8 @@ DEFAULT_SCOPES = [
     "pagamento-boleto.write",
     "pagamento-pix.read",
     "pagamento-pix.write",
-    "pagamento-ted.read",
-    "pagamento-ted.write",
+    # No TED scope: the Banking API has no TED endpoint, and asking for a scope the bank does not
+    # publish puts the whole token request at risk.
 ]
 
 # Buffer before token expiry to trigger refresh

@@ -11,16 +11,19 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 
+from brazil_module.services.banking.payment_common import ACCOUNT_DOCTYPE
+
 DOCTYPE = "Inter Payment Order"
 
-# The bank may hold the payment: the order cannot be cancelled, re-sent or forgotten.
+# The bank may hold the payment: the order cannot be cancelled, re-sent or forgotten. Nothing in
+# production reads this tuple - it is the vocabulary of spec section 3, and the DocType contract
+# test checks the JSON against it, so a status added to the state machine cannot be forgotten here.
 IN_FLIGHT_STATUSES = ("Processing", "Awaiting Bank", "Needs Verification")
 # The bank definitely does not hold the payment: the invoice is free for a new attempt.
 NON_BLOCKING_STATUSES = ("Failed", "Cancelled")
 CANCELLABLE_STATUSES = ("Draft", "Pending Approval", "Approved", "Failed")
 AMOUNT_TOLERANCE = 0.01
 
-ACCOUNT_DOCTYPE = "Inter Company Account"
 SUPPLIER_PAYMENT_HOLD_TYPES = ("All", "Payments")
 _INVOICE_FIELDS = ["docstatus", "on_hold", "outstanding_amount", "supplier", "company"]
 

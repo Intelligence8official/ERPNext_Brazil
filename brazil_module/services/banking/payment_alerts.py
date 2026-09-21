@@ -16,19 +16,12 @@ import sys
 import frappe
 from frappe.utils import get_url_to_form
 
+from brazil_module.services.banking.payment_common import ERROR_LOG_TITLE_LENGTH, JobTimeoutException
 from brazil_module.services.banking.payment_guards import DOCTYPE
-
-try:
-    from rq.timeouts import JobTimeoutException
-except ImportError:  # rq always comes with Frappe; the unit tests run without it
-
-    class JobTimeoutException(Exception):
-        """Keeps ``except JobTimeoutException`` valid where rq is not installed."""
 
 MANAGER_ROLE = "Banco Inter Manager"
 FALLBACK_USER = "Administrator"
 AGENT_SETTINGS = "I8 Agent Settings"
-ERROR_LOG_TITLE_LENGTH = 140  # Error Log.method is a 140-character column
 
 
 def alert_operator(subject: str, message: str, order_name: str | None = None) -> None:

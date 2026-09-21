@@ -12,6 +12,7 @@ from datetime import date, timedelta
 
 import frappe
 
+from brazil_module.services.banking.payment_common import JobTimeoutException, bank_gl_account
 from brazil_module.services.banking.payment_guards import (
     DOCTYPE as PAYMENT_ORDER_DOCTYPE,
     NON_BLOCKING_STATUSES,
@@ -19,14 +20,6 @@ from brazil_module.services.banking.payment_guards import (
     get_inter_account_for_company,
     is_integration_enabled,
 )
-
-try:
-    from rq.timeouts import JobTimeoutException
-except ImportError:  # rq always comes with Frappe; the unit tests run without it
-
-    class JobTimeoutException(Exception):
-        """Keeps ``except JobTimeoutException`` valid where rq is not installed."""
-
 
 # "Nothing is paying this invoice": no Payment Entry (draft or submitted) and no *blocking*
 # Inter Payment Order. The order half is payment_guards.is_blocking() written in SQL: an order
@@ -442,7 +435,7 @@ def _schedule_boleto_payment(inv: dict) -> dict:
     """Create the boleto order of an invoice (barcode and due date from it) and queue its execution."""
     barcode = frappe.db.get_value("Purchase Invoice", inv["name"], "boleto_barcode")
     if not barcode:
-        return {"status": "error", "invoice": inv["name"], "error": "Falta linha digitavel do boleto"}
+        return {"status": "error", "invoice": inv["name"], "error": "The Purchase Invoice has no boleto barcode"}
     return _create_and_queue_order(
         inv, "Boleto Payment", "Boleto", barcode=barcode, boleto_due_date=inv["due_date"],
     )
@@ -550,13 +543,7 @@ def _create_payment_entry_draft(inv: dict, mode: str) -> str:
 
 def _inter_gl_account(company: str) -> str | None:
     """GL account behind the company's Inter account, when there is one."""
-    inter_account = get_inter_account_for_company(company)
-    if not inter_account:
-        return None
-    bank_account = frappe.db.get_value("Inter Company Account", inter_account, "bank_account")
-    if not bank_account:
-        return None
-    return frappe.db.get_value("Bank Account", bank_account, "account") or None
+    return bank_gl_account(get_inter_account_for_company(company))
 
 
 def _send_payment_summary(results: list) -> None:

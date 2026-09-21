@@ -358,7 +358,7 @@ class TestBoletoInvoice(SchedulerCase):
         self.assertEqual(self.created, [])
         self.assertEqual(self.enqueued, [])
         self.assertIn("Erros: 1", self.summary())
-        self.assertIn("linha digitavel", self.summary())
+        self.assertIn("boleto barcode", self.summary())
 
 
 class TestOtherModes(SchedulerCase):

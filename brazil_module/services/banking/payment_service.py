@@ -12,6 +12,15 @@ Spec: docs/superpowers/specs/2026-09-20-inter-payment-safety-design.md (sections
       ``modified``. A submitted order is never saved through its Document.
 - I7  The Payment Entry exists only once the bank (or the operator) says the money left.
 - I9  Every transition re-reads the row under a lock and writes only from the expected status.
+
+It stays whole on purpose: this is one story - the money path - and the only repo-wide guard of I1
+is an AST scan of THIS module (see tests/test_payment_invariants.py). Splitting the send across
+files would leave that scan passing while it no longer watches anything. Read it in this order:
+
+    entry points -> claim -> before the send -> the send -> polling -> compare-and-set core
+    -> Payment Entry -> Needs Verification -> hourly cron -> creating an order -> doc_event hook
+
+Each section banner names the paragraph of the spec it implements.
 """
 
 import json
@@ -29,6 +38,12 @@ from brazil_module.services.banking.inter_client import (
     InterAPIError,
 )
 from brazil_module.services.banking.payment_alerts import alert_operator
+from brazil_module.services.banking.payment_common import (
+    ACCOUNT_DOCTYPE,
+    ERROR_LOG_TITLE_LENGTH,
+    JobTimeoutException,
+    bank_gl_account,
+)
 from brazil_module.services.banking.payment_guards import (
     DOCTYPE,
     check_invoice_payable,
@@ -38,15 +53,6 @@ from brazil_module.services.banking.payment_guards import (
     is_integration_enabled,
 )
 
-try:
-    from rq.timeouts import JobTimeoutException
-except ImportError:  # rq always comes with Frappe; the unit tests run without it
-
-    class JobTimeoutException(Exception):
-        """Keeps ``except JobTimeoutException`` valid where rq is not installed."""
-
-
-ACCOUNT_DOCTYPE = "Inter Company Account"
 PIX = "PIX"
 BOLETO = "Boleto Payment"
 
@@ -60,12 +66,14 @@ MAX_POLLS_PER_RUN = 15
 POLL_BUDGET = timedelta(seconds=240)
 PIX_DESCRIPTION_LIMIT = 140
 BARCODE_LENGTHS = (44, 47, 48)
-ERROR_LOG_TITLE_LENGTH = 140
 
 # Bank status mapping (spec 3). Whatever is in none of these sets is still in flight.
 PIX_PAID = frozenset({"PAGO", "PIX_PAGO"})
 PIX_REJECTED = frozenset({"REPROVADO", "EXPIRADO", "CANCELADO", "CANCELADO_SEM_SALDO", "AGENDAMENTO_CANCELADO"})
 PIX_NEEDS_HUMAN = frozenset({"FALHA", "NAO_DEBITADO"})
+# PAGO, AGENDADO_REALIZADO, ERRO_PAGAMENTO and AGENDADO_NAO_REALIZADO are not in SituacaoPagamento,
+# the enum GET/POST /banking/v2/pagamento return; they come from the batch enum. Deliberate
+# aliases - do not "clean them up".
 BOLETO_PAID = frozenset({"REALIZADO", "PAGO", "AGENDADO_REALIZADO"})
 BOLETO_REJECTED = frozenset({
     "CANCELADO", "AGENDADO_CANCELADO", "ERRO", "ERRO_PAGAMENTO", "APROVACAO_EXPIRADA",
@@ -91,7 +99,7 @@ class _NothingSent(Exception):
 
 
 # ---------------------------------------------------------------------------
-# Entry points
+# Entry points (spec 4.4)
 # ---------------------------------------------------------------------------
 
 def enqueue_payment_execution(payment_order_name: str) -> bool:
@@ -182,7 +190,7 @@ def _report_reused_order(name: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Before the send: whatever fails here means nothing reached the bank
+# Before the send: whatever fails here means nothing reached the bank (spec 4.4 step 3)
 # ---------------------------------------------------------------------------
 
 def _prepare_send(order: dict) -> tuple:
@@ -288,7 +296,7 @@ def _fail_before_send(order: dict, error: Exception) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# The send (the only place that talks to the bank's payment endpoints - I1)
+# The send (the only place that talks to the bank's payment endpoints - I1) (spec 4.4 steps 4-5)
 # ---------------------------------------------------------------------------
 
 def _send_and_record(order: dict, client, payload: dict) -> dict:
@@ -389,7 +397,7 @@ def _follow_up(order: dict, accepted: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Polling: never sends, never fails an order from absence
+# Polling: never sends, never fails an order from absence (spec 3, bank status mapping)
 # ---------------------------------------------------------------------------
 
 def poll_bank_status(payment_order_name: str, *, interactive: bool = False) -> dict:
@@ -545,7 +553,7 @@ def _store_bank_status(name: str, bank_status: str, *, expected_from: tuple) -> 
 
 
 # ---------------------------------------------------------------------------
-# Compare-and-set core (I5, I9): every mark_* returns True only when it wrote
+# Compare-and-set core (I5, I9): every mark_* returns True only when it wrote (spec 4.4)
 # ---------------------------------------------------------------------------
 
 def mark_awaiting_bank(name: str, *, expected_from: tuple, bank_id: str, bank_status: str, response=None) -> bool:
@@ -676,7 +684,7 @@ def _error_title(name: str, what: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Payment Entry (I7): idempotent, never changes the order status, never retried on its own
+# Payment Entry (I7): idempotent, never changes the order status, never retried on its own (spec 4.4)
 # ---------------------------------------------------------------------------
 
 def create_payment_entry_for_order(payment_order_name: str, paid_on=None) -> str | None:
@@ -761,7 +769,7 @@ def _insert_payment_entry(order: dict, invoice: dict, paid_on) -> str:
     entry.posting_date = posting_date
     entry.party_type = "Supplier"
     entry.party = invoice.get("supplier")
-    entry.paid_from = _bank_gl_account(order.get("inter_company_account"))
+    entry.paid_from = bank_gl_account(order.get("inter_company_account"))
     entry.paid_to = invoice.get("credit_to")
     entry.paid_amount = amount
     entry.received_amount = amount
@@ -778,11 +786,6 @@ def _insert_payment_entry(order: dict, invoice: dict, paid_on) -> str:
     return entry.name
 
 
-def _bank_gl_account(inter_account: str | None) -> str | None:
-    bank_account = frappe.db.get_value(ACCOUNT_DOCTYPE, inter_account, "bank_account") if inter_account else None
-    return frappe.db.get_value("Bank Account", bank_account, "account") if bank_account else None
-
-
 def _report_entry_failure(name: str, error: Exception) -> None:
     detail = f"{type(error).__name__}: {error}"
     _best_effort(_log_traceback, _error_title(name, "Payment Entry failed"))
@@ -795,7 +798,7 @@ def _report_entry_failure(name: str, error: Exception) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Needs Verification: a human decides, with the bank's word when there is one
+# Needs Verification: a human decides, with the bank's word when there is one (spec 3, 4.4)
 # ---------------------------------------------------------------------------
 
 def resolve_verification(
@@ -918,7 +921,7 @@ def _parse_date(value):
 
 
 # ---------------------------------------------------------------------------
-# Hourly cron: it never sends
+# Hourly cron: it never sends (spec 4.4, scheduled_payment_status_check)
 # ---------------------------------------------------------------------------
 
 def scheduled_payment_status_check() -> None:
@@ -1015,7 +1018,7 @@ def _guarded(action, name: str, *args, **kwargs):
 
 
 # ---------------------------------------------------------------------------
-# Creating an order for an invoice (API and weekly scheduler)
+# Creating an order for an invoice (API and weekly scheduler) (spec 4.5, 4.6)
 # ---------------------------------------------------------------------------
 
 def create_payment_order_for_invoice(
@@ -1061,7 +1064,7 @@ def _set_recipient(order, supplier: str | None) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Payment Entry cancelled (doc_event): runs INSIDE the entry's transaction - no commit, no rollback
+# Payment Entry cancelled (doc_event): runs INSIDE the entry's transaction - no commit, no rollback (spec 4.4)
 # ---------------------------------------------------------------------------
 
 def on_payment_entry_cancel(doc, method=None) -> None:

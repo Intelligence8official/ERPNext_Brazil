@@ -8,7 +8,7 @@ TOOL_SCHEMAS = [
             "type": "object",
             "properties": {
                 "purchase_invoice": {"type": "string"},
-                "payment_method": {"type": "string", "enum": ["PIX", "TED", "Boleto"]},
+                "payment_method": {"type": "string", "enum": ["PIX", "Boleto"]},
             },
             "required": ["purchase_invoice", "payment_method"],
         },
