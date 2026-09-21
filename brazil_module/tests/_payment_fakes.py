@@ -283,6 +283,12 @@ class FakeDB:
     def get_single_value(self, doctype, field, **kw):
         return copy.deepcopy(self.singles.get(doctype, {}).get(field))
 
+    def set_single_value(self, doctype, field, value=None, **kw):
+        """A Single's field. ``field`` may be a dict, as in ``frappe.db.set_single_value``."""
+        values = field if isinstance(field, dict) else {field: value}
+        self.singles.setdefault(doctype, {}).update(copy.deepcopy(values))
+        self.events.append(("set_single_value", doctype, dict(values)))
+
     def exists(self, doctype, filters=None):
         if isinstance(doctype, dict):
             filters = {key: value for key, value in doctype.items() if key != "doctype"}
@@ -421,6 +427,7 @@ class FakeInterClient:
         "pay_barcode": {"statusPagamento": "AGUARDANDO_APROVACAO", "codigoTransacao": "fake-codigo-transacao"},
         "get_pix_payment": {"transacaoPix": {"status": "AGUARDANDO_APROVACAO"}},
         "find_barcode_payments": [],
+        "get_webhook": {},
         "get_cert_paths": ("/private/files/inter.crt", "/private/files/inter.key"),
     }
     # Kept equal to the real client by test_payment_fakes.py (it reads inter_client.py).
@@ -458,6 +465,11 @@ class FakeInterClient:
         self.calls.append(("get_pix_payment", codigo_solicitacao, max_retries))
         self.db.events.append(("bank", "get_pix_payment", codigo_solicitacao))
         return self._respond("get_pix_payment", codigo_solicitacao)
+
+    def get_webhook(self, webhook_type: str = "pix") -> dict:
+        self.calls.append(("get_webhook", webhook_type))
+        self.db.events.append(("bank", "get_webhook", webhook_type))
+        return self._respond("get_webhook", webhook_type)
 
     def find_barcode_payments(self, **kw) -> list[dict]:
         self._refuse_like_the_real_client(kw)

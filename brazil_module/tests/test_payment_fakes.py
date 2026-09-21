@@ -771,6 +771,41 @@ class TestFakeInterClientMirrorsTheRealClient(unittest.TestCase):
         self.assertEqual(client.calls, [("find_barcode_payments", poll)])
 
 
+class TestFakeDBSingles(unittest.TestCase):
+    def test_a_single_field_is_written_and_read_back(self):
+        db = FakeDB(singles={"Banco Inter Settings": {"enabled": 1}})
+
+        db.set_single_value("Banco Inter Settings", "enabled", 0)
+
+        self.assertEqual(db.get_single_value("Banco Inter Settings", "enabled"), 0)
+        self.assertIn(("set_single_value", "Banco Inter Settings", {"enabled": 0}), db.events)
+
+    def test_a_dict_writes_several_fields_at_once(self):
+        db = FakeDB()
+
+        db.set_single_value("Banco Inter Settings", {"a": 1, "b": "two"})
+
+        self.assertEqual(db.get_single_value("Banco Inter Settings", "b"), "two")
+
+    def test_a_single_that_did_not_exist_is_created(self):
+        db = FakeDB()
+
+        db.set_single_value("New Single", "field", "value")
+
+        self.assertEqual(db.get_single_value("New Single", "field"), "value")
+
+
+class TestFakeInterClientWebhook(unittest.TestCase):
+    def test_reading_the_webhook_is_recorded_and_needs_no_claim(self):
+        db = _db_with_order()
+        client = FakeInterClient(db, doctype_row=(DOCTYPE, "IPO-1"))
+        client.responses["get_webhook"] = {"webhookUrl": "https://erp.test/hook"}
+
+        self.assertEqual(client.get_webhook()["webhookUrl"], "https://erp.test/hook")
+        self.assertEqual(client.calls, [("get_webhook", "pix")])
+        self.assertEqual(client.i2_violations, [])
+
+
 class TestFakeSubmittedDoc(unittest.TestCase):
     """The production defect: `order.save()` on a submitted order raises after the bank accepted."""
 
