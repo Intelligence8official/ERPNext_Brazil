@@ -818,6 +818,14 @@ def i8_test_llm_connection():
 
 
 @frappe.whitelist()
+def check_banking_health() -> dict:
+    """Ask whether the channel to Banco Inter is working. Reads only - it never writes there."""
+    from brazil_module.services.banking.banking_health import check
+
+    return check()
+
+
+@frappe.whitelist()
 def i8_check_telegram_webhook():
     """Ask Telegram who the bot is and how delivery is going."""
     from brazil_module.services.intelligence.channels.telegram_health import check

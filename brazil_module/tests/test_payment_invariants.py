@@ -314,6 +314,28 @@ class TestWiring(unittest.TestCase):
 # Developer guide
 # ---------------------------------------------------------------------------
 
+class TestTheWatchmanOnlyReads(unittest.TestCase):
+    """D1 of the banking-health spec: no unattended job may write to Banco Inter again."""
+
+    WATCHMAN = "services/banking/banking_health.py"
+    WRITES = (
+        "send_pix", "pay_barcode", "send_ted", "register_webhook", "delete_webhook",
+        "create_boleto", "cancel_boleto", "create_pix_charge", "create_pix_charge_with_due_date",
+    )
+
+    def test_it_names_no_write_method_of_the_client(self):
+        source = read(self.WATCHMAN)
+        for method in self.WRITES:
+            with self.subTest(method=method):
+                self.assertNotIn(f".{method}(", source)
+
+    def test_the_only_thing_it_writes_is_the_settings_single(self):
+        source = read(self.WATCHMAN)
+        self.assertNotIn("set_value(", source.replace("set_single_value(", ""))
+        self.assertNotIn("frappe.new_doc(", source)
+        self.assertNotIn(".insert(", source)
+
+
 class TestDeveloperGuide(unittest.TestCase):
     def setUp(self):
         self.guide = read("CLAUDE.md", REPO_ROOT)

@@ -795,6 +795,17 @@ class TestFakeDBSingles(unittest.TestCase):
         self.assertEqual(db.get_single_value("New Single", "field"), "value")
 
 
+class TestFakeDBCount(unittest.TestCase):
+    def test_it_counts_the_rows_a_filter_matches(self):
+        db = FakeDB()
+        db.add("Bank Transaction", "BT-1", docstatus=1, unallocated_amount=0.0)
+        db.add("Bank Transaction", "BT-2", docstatus=1, unallocated_amount=10.0)
+
+        self.assertEqual(db.count("Bank Transaction", {"docstatus": 1}), 2)
+        self.assertEqual(db.count("Bank Transaction", {"unallocated_amount": [">", 0]}), 1)
+        self.assertEqual(db.count("Nothing Here"), 0)
+
+
 class TestFakeInterClientWebhook(unittest.TestCase):
     def test_reading_the_webhook_is_recorded_and_needs_no_claim(self):
         db = _db_with_order()

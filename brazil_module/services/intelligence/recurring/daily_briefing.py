@@ -131,6 +131,7 @@ def build_briefing() -> str:
 
     section_funcs = [
         lambda: f"*Daily Briefing — {today.strftime('%d/%m/%Y')} ({'Segunda' if is_monday else _weekday_name(today)})*\n",
+        _banking_health_section,
         _bank_balance_section,
         _reconciliation_status_section,
         lambda: _payables_section(today, is_monday),
@@ -161,6 +162,60 @@ def _weekday_name(d: date) -> str:
     return names[d.weekday()]
 
 
+BANKING_HEALTH_TITLE = "*Comunicacao bancaria:*"
+
+
+def _banking_health_section() -> str:
+    """What the daily watchman last found, repeated every day - unlike a single alert.
+
+    Empty while the channel is healthy. First, because the answer to "is any of this current?"
+    decides how to read the balance below it. A failure is reported IN the section rather than
+    raised: build_briefing() drops a section that raises, and this one vanishing would read as
+    "nothing to worry about" - which is exactly what five silent months already looked like.
+    """
+    try:
+        verdict = banking_health_status()
+        if not verdict.get("state") or verdict["state"] == "ok":
+            return ""
+        lines = [BANKING_HEALTH_TITLE]
+        lines += [f"  {part.strip()}" for part in str(verdict.get("summary") or "").split("|") if part.strip()]
+        checked = verdict.get("checked_on")
+        if checked:
+            lines.append(f"  (verificado em {frappe.utils.format_datetime(checked, 'dd/MM HH:mm')})")
+        return "\n".join(lines)
+    except Exception as e:
+        try:
+            frappe.log_error(title="I8 Briefing Banking Health Error", message=str(e))
+        except Exception:
+            pass
+        return f"{BANKING_HEALTH_TITLE}\n  Nao foi possivel ler a saude da conexao (ver Error Log)"
+
+
+def banking_health_status() -> dict:
+    """Indirection on purpose: the section is tested against a reader that can be made to fail."""
+    from brazil_module.services.banking.banking_health import status
+
+    return status()
+
+
+def _balance_age(balance_date) -> str:
+    """A balance is only news while it is recent; an old one has to say how old it is.
+
+    The age is an annotation, the balance is the information: if the date cannot be read, print it
+    as it is rather than let the whole line disappear into the caller's except.
+    """
+    if not balance_date:
+        return "sem data"
+    try:
+        as_date = frappe.utils.getdate(balance_date)
+        days = (now_datetime().date() - as_date).days
+        if days <= 0:
+            return str(as_date)
+        return f"{as_date}, ha {days} dias"
+    except Exception:
+        return str(balance_date)
+
+
 def _bank_balance_section() -> str:
     """Bank account balances from Inter API and GL Entry."""
     lines = ["*Saldo Bancario:*"]
@@ -174,8 +229,7 @@ def _bank_balance_section() -> str:
         for acc in inter_accounts:
             balance = float(acc.get("current_balance") or 0)
             if balance > 0:
-                balance_date = acc.get("balance_date") or ""
-                lines.append(f"  Inter ({acc['company']}): R$ {balance:,.2f} ({balance_date})")
+                lines.append(f"  Inter ({acc['company']}): R$ {balance:,.2f} ({_balance_age(acc.get('balance_date'))})")
     except Exception:
         pass
 
@@ -615,6 +669,15 @@ def _reconciliation_status_section() -> str:
         pct = (reconciled / total * 100) if total > 0 else 0
 
         lines = ["*Conciliacao Bancaria:*"]
+        stale = _statement_age()
+        if stale:
+            # Counting old transactions that are all reconciled is how a dead channel reports
+            # "em dia": say the extract stopped instead.
+            lines.append(f"  Sem extrato novo ha {stale} dias - os numeros abaixo sao antigos")
+            lines.append(f"  {reconciled}/{total} transacoes conciliadas ({pct:.0f}%)")
+            if unreconciled:
+                lines.append(f"  {unreconciled} transacoes pendentes")
+            return "\n".join(lines)
         if unreconciled == 0:
             lines.append("  Em dia (100% conciliado)")
         else:
@@ -623,6 +686,22 @@ def _reconciliation_status_section() -> str:
         return "\n".join(lines)
     except Exception:
         return ""
+
+
+def _statement_age() -> int:
+    """Days since the newest statement sync, or 0 while it is recent enough to trust."""
+    from brazil_module.services.banking.banking_health import SYNC_STALE_DAYS
+
+    synced = [
+        row.get("last_statement_sync")
+        for row in frappe.get_all("Inter Company Account", filters={"sync_enabled": 1},
+                                  fields=["last_statement_sync"])
+    ]
+    newest = max((frappe.utils.get_datetime(when) for when in synced if when), default=None)
+    if newest is None:
+        return 0  # never synced, or no account: _banking_health_section already says it
+    days = (now_datetime() - newest).days
+    return days if days >= SYNC_STALE_DAYS else 0
 
 
 def _get_user_first_name() -> str:

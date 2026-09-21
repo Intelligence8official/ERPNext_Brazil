@@ -289,6 +289,9 @@ class FakeDB:
         self.singles.setdefault(doctype, {}).update(copy.deepcopy(values))
         self.events.append(("set_single_value", doctype, dict(values)))
 
+    def count(self, doctype, filters=None) -> int:
+        return len(self._select(doctype, filters, coalesce_null=True))
+
     def exists(self, doctype, filters=None):
         if isinstance(doctype, dict):
             filters = {key: value for key, value in doctype.items() if key != "doctype"}

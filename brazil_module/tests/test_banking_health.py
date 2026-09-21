@@ -376,11 +376,14 @@ class TestWhenItInterrupts(HealthCase):
         self.assertEqual(len(self.alerts), 1, "the same problem interrupted twice in two days")
 
     def test_a_week_later_it_reminds(self):
+        """Seven days, written out: deriving it from REMINDER_DAYS would move the test with it."""
         self.settings()["enabled"] = 0
 
         self.run_at(NOW)
-        self.run_at(NOW + datetime.timedelta(days=_bh.REMINDER_DAYS))
+        self.run_at(NOW + datetime.timedelta(days=6))
+        self.assertEqual(len(self.alerts), 1, "six days is not a week")
 
+        self.run_at(NOW + datetime.timedelta(days=7))
         self.assertEqual(len(self.alerts), 2)
 
     def test_recovering_is_worth_one_message_and_then_silence(self):
