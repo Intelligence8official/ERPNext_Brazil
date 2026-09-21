@@ -63,6 +63,10 @@ class TestCronSchedule(unittest.TestCase):
             "brazil_module.services.banking.payment_service.scheduled_payment_status_check",
             "brazil_module.services.banking.pix_service.scheduled_pix_status_check",
             "brazil_module.services.intelligence.recurring.daily_briefing.scheduled_briefing",
+            # Their hour lives in I8 Agent Settings, so they ride the 15-minute tick and each one
+            # checks its own window. Dropped from here, they simply never run.
+            "brazil_module.services.intelligence.recurring.expense_scheduler.daily_check",
+            "brazil_module.services.intelligence.recurring.follow_up_manager.check_overdue",
         ]
         for fn in required:
             self.assertIn(

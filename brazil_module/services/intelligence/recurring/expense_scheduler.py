@@ -3,9 +3,21 @@ from datetime import date, timedelta
 
 import frappe
 
+from brazil_module.services.intelligence.daily_window import is_due, mark_done
+
+
+EXPENSE_CHECK_MARKER = "i8_last_expense_check_date"
+
 
 def daily_check():
+    """Woken every fifteen minutes; runs once, at the hour configured in I8 Agent Settings.
+
+    The hour cannot live in hooks.py - that map is a static dict - so the job decides. The marker
+    is written only after the work, so a failure retries on the next tick instead of skipping a day.
+    """
     if not frappe.db.get_single_value("I8 Agent Settings", "enabled"):
+        return
+    if not is_due("expense_check_time", EXPENSE_CHECK_MARKER, default="07:00:00"):
         return
 
     today = date.today()
@@ -42,6 +54,8 @@ def daily_check():
                 },
                 deduplicate=True,
             )
+
+    mark_done(EXPENSE_CHECK_MARKER)
 
 
 def _advance_schedule(expense_name: str) -> None:

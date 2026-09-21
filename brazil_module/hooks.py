@@ -77,15 +77,15 @@ scheduler_events = {
         ],
         # Every 15 minutes:
         #   - Banking: check PIX charge status
-        #   - Intelligence8: daily briefing (only fires inside its configured window)
+        #   - Intelligence8: the three jobs whose hour the operator configures. The map here is a
+        #     static dict, so they cannot be scheduled at a time held in the database: they are
+        #     woken often and each one checks its own window (services/intelligence/daily_window.py).
         "*/15 * * * *": [
             "brazil_module.services.banking.pix_service.scheduled_pix_status_check",
             "brazil_module.services.intelligence.recurring.daily_briefing.scheduled_briefing",
+            "brazil_module.services.intelligence.recurring.expense_scheduler.daily_check",
+            "brazil_module.services.intelligence.recurring.follow_up_manager.check_overdue",
         ],
-        # Intelligence8: Daily expense check at 07:00
-        "0 7 * * *": ["brazil_module.services.intelligence.recurring.expense_scheduler.daily_check"],
-        # Intelligence8: Follow-up check at 09:00
-        "0 9 * * *": ["brazil_module.services.intelligence.recurring.follow_up_manager.check_overdue"],
         # Intelligence8: Planning loop every hour at :30
         "30 * * * *": [
             "brazil_module.services.intelligence.recurring.planning_loop.hourly_check"

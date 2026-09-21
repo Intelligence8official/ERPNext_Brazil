@@ -11,6 +11,9 @@ if "frappe" not in sys.modules or not isinstance(sys.modules["frappe"], MagicMoc
 frappe = sys.modules["frappe"]
 
 import unittest
+from unittest.mock import patch
+
+import brazil_module.services.intelligence.recurring.expense_scheduler as _job_mod
 
 from brazil_module.services.intelligence.recurring.expense_scheduler import (
     _is_due, calculate_next_due, daily_check, _advance_schedule,
@@ -61,8 +64,20 @@ class TestCalculateNextDue(unittest.TestCase):
         self.assertEqual(result, date(2026, 2, 28))
 
 
+
+def _open_the_window(test_case):
+    """These tests are about what the job DOES; its hour has its own tests below."""
+    patcher = patch.object(_job_mod, "is_due", return_value=True)
+    patcher.start()
+    test_case.addCleanup(patcher.stop)
+    mark = patch.object(_job_mod, "mark_done")
+    test_case.marked = mark.start()
+    test_case.addCleanup(mark.stop)
+
+
 class TestDailyCheck(unittest.TestCase):
     def setUp(self):
+        _open_the_window(self)
         frappe.reset_mock()
         frappe.db.get_single_value.side_effect = None
         frappe.db.get_single_value.return_value = None
@@ -148,3 +163,35 @@ class TestAdvanceSchedule(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheConfiguredHour(unittest.TestCase):
+    """The hour lives in I8 Agent Settings, so the job is woken often and decides for itself."""
+
+    def setUp(self):
+        frappe.reset_mock()
+        frappe.db.get_single_value.side_effect = None
+        frappe.db.get_single_value.return_value = True
+        frappe.get_all.return_value = []
+
+    def test_outside_its_window_it_does_nothing(self):
+        with patch.object(_job_mod, "is_due", return_value=False) as due:
+            _job_mod.daily_check()
+
+        frappe.get_all.assert_not_called()
+        self.assertEqual(due.call_args.args[0], "expense_check_time")
+        self.assertEqual(due.call_args.args[1], _job_mod.EXPENSE_CHECK_MARKER)
+
+    def test_the_day_is_marked_only_after_the_work(self):
+        with patch.object(_job_mod, "is_due", return_value=True), \
+             patch.object(_job_mod, "mark_done") as mark:
+            _job_mod.daily_check()
+
+        mark.assert_called_once_with(_job_mod.EXPENSE_CHECK_MARKER)
+
+    def test_a_disabled_agent_is_still_checked_first(self):
+        frappe.db.get_single_value.return_value = False
+        with patch.object(_job_mod, "is_due") as due:
+            _job_mod.daily_check()
+
+        due.assert_not_called()

@@ -2,9 +2,21 @@ from datetime import date, timedelta
 
 import frappe
 
+from brazil_module.services.intelligence.daily_window import is_due, mark_done
+
+
+FOLLOWUP_CHECK_MARKER = "i8_last_followup_check_date"
+
 
 def check_overdue():
+    """Woken every fifteen minutes; runs once, at the hour configured in I8 Agent Settings.
+
+    The once-a-day marker is what makes the frequent wake-up safe: the follow-ups it queues become
+    agent events, and an agent event costs a call to the model.
+    """
     if not frappe.db.get_single_value("I8 Agent Settings", "enabled"):
+        return
+    if not is_due("followup_check_time", FOLLOWUP_CHECK_MARKER, default="09:00:00"):
         return
 
     profiles = frappe.get_all(
@@ -38,6 +50,8 @@ def check_overdue():
                 },
                 deduplicate=True,
             )
+
+    mark_done(FOLLOWUP_CHECK_MARKER)
 
 
 def _find_overdue_pos(profile: dict) -> list:

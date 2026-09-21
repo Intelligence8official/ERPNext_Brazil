@@ -3,6 +3,8 @@ from datetime import date, datetime, timedelta, time as dt_time
 
 import frappe
 
+from brazil_module.services.intelligence.daily_window import is_due
+
 
 # Cache key for the "briefing already sent today" dedup marker. Written by
 # scheduled_briefing() ONLY after a successful send (never before), so that a
@@ -78,29 +80,6 @@ def scheduled_briefing():
             _send_payment_orders_left_out(formatted)
 
 
-def _briefing_target() -> tuple[int, int]:
-    """The configured hour and minute of the briefing.
-
-    ``briefing_time`` is a Time field, and Frappe casts Time to ``timedelta`` - never to the string
-    this used to split. While the field was empty the fallback string worked, which is why the
-    briefing ran until the day an hour was actually configured: from then on every tick raised
-    AttributeError, outside the try that guards the rest, and the job died every fifteen minutes.
-    """
-    value = frappe.db.get_single_value("I8 Agent Settings", "briefing_time")
-    try:
-        # str() is the whole fix: a timedelta prints as "4:00:00" and a time as "09:30:00", both
-        # of which split cleanly. The old code split the object itself.
-        parts = str(value or "08:00:00").split(":")
-        return int(parts[0]), int(parts[1]) if len(parts) > 1 else 0
-    except (TypeError, ValueError):
-        # Whatever is in there, it must not take the scheduled job down forever.
-        try:
-            frappe.log_error(title="I8 Briefing Time", message=f"briefing_time ilegivel: {value!r}")
-        except Exception:
-            pass
-        return 8, 0
-
-
 def _compose_and_send() -> tuple[bool, str]:
     """Build the briefing and hand it to Telegram. Returns ``(sent, formatted)``."""
     today = date.today()
@@ -142,22 +121,7 @@ def _is_briefing_time() -> bool:
     written by scheduled_briefing() only after a successful send, so a failed
     send is retried on the next scheduler tick rather than suppressed for 24h.
     """
-    target_hour, target_minute = _briefing_target()
-
-    now = datetime.now()
-    target = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
-
-    # Check if we're within the 15-minute window starting at configured time
-    diff_minutes = (now - target).total_seconds() / 60
-    if not (0 <= diff_minutes < 15):
-        return False
-
-    # Already sent today? (read-only — do not write the marker here)
-    last_sent = frappe.cache.get_value(_BRIEFING_SENT_KEY)
-    if last_sent == now.strftime("%Y-%m-%d"):
-        return False
-
-    return True
+    return is_due("briefing_time", _BRIEFING_SENT_KEY, default="08:00:00", now=datetime.now())
 
 
 def build_briefing() -> str:
