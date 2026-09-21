@@ -801,6 +801,21 @@ class TestFakeSubmittedDoc(unittest.TestCase):
         self.assertIn("status", str(ctx.exception))
         self.assertEqual(db.row(DOCTYPE, "IPO-1")["status"], "Processing")
 
+    def test_a_save_on_a_submitted_order_is_recorded_even_though_it_raises(self):
+        """The positive control for "the service never saves": a swallowed save must still show up.
+
+        The callers wrap their writes in ``_best_effort``, so an unrecorded save would leave the
+        whole I5 regression test asserting on an event that can never be appended.
+        """
+        db = _db_with_order(status="Processing")
+        doc = FakeSubmittedDoc(db, "IPO-1")
+        doc.status = "Completed"
+
+        with self.assertRaises(UpdateAfterSubmitError):
+            doc.save()
+
+        self.assertIn(("save", DOCTYPE, "IPO-1"), db.events)
+
     def test_save_raises_for_a_result_field_filled_after_submit(self):
         doc = FakeSubmittedDoc(_db_with_order(status="Processing"), "IPO-1")
         doc.transaction_id = "E2E-1"

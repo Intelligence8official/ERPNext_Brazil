@@ -176,6 +176,19 @@ class FakePaymentEntry:
             raise RuntimeError(f"Payment Entry {step} refused: accounting period is closed")
 
 
+def _fixture_lock(row: dict, docstatus: int):
+    """Which invoice a fixture order holds, restated here on purpose.
+
+    Deriving it from ``payment_guards.is_blocking`` would make the fixture move with the very rule
+    the tests exist to pin: break the rule and the fixture would break the same way, in silence.
+    """
+    if docstatus >= 2 or row["status"] in ("Failed", "Cancelled"):
+        return None
+    if row["status"] == "Completed" and row["payment_entry"]:
+        return None
+    return row["purchase_invoice"]
+
+
 class ServiceCase(unittest.TestCase):
     """A payable invoice, an enabled integration, an Inter account and a fake bank."""
 
@@ -262,8 +275,7 @@ class ServiceCase(unittest.TestCase):
         }
         row.update(fields)
         if "invoice_lock" not in row:
-            blocking = _guards.is_blocking(row["status"], row["payment_entry"]) and docstatus < 2
-            row["invoice_lock"] = row["purchase_invoice"] if blocking else None
+            row["invoice_lock"] = _fixture_lock(row, docstatus)
         self.db.add(DOCTYPE, name, **row)
 
     def add_in_flight(self, status, name=ORDER, minutes_ago=1, **fields):
@@ -603,6 +615,31 @@ class TestPreSendGuards(ServiceCase):
 
         self.assert_failed_without_a_send(self.execute(), "IPO-2026-00001")
 
+    def test_a_pre_send_failure_does_not_overwrite_an_order_that_left_processing(self):
+        """The compare-and-set earns its keep here: stamping Failed would free a live invoice.
+
+        Another worker (or the operator resolving the verification) can move the row while this job
+        is between its claim and its guards. Writing ``Failed`` blindly would also clear
+        ``invoice_lock`` - on an order the bank may be holding a payment for.
+        """
+        self.add_order("Approved")
+
+        def moved_then_refused(*args, **kwargs):
+            self.db.set_value(DOCTYPE, ORDER, {"status": "Awaiting Bank"})
+            self.db.commit()
+            return "Purchase Invoice ACC-PINV-2026-00031 is on hold"
+
+        self._patch(_ps_mod, check_invoice_payable=moved_then_refused)
+
+        result = self.execute()
+
+        self.assertEqual(result["status"], "skipped")
+        row = self.order()
+        self.assertEqual((row["status"], row["invoice_lock"]), ("Awaiting Bank", INVOICE))
+        self.assertEqual(self.events("bank"), [])
+        locked = [read for read in self.db.reads if read["doctype"] == DOCTYPE and read["for_update"]]
+        self.assertTrue(locked, "the refusal must come from a locked re-read, not from memory")
+
     def test_an_order_without_an_invoice_skips_the_invoice_guard(self):
         self.add_order("Approved", purchase_invoice=None)
 
@@ -746,6 +783,40 @@ class TestSendClassification(ServiceCase):
         self.assertEqual(len(self.sends()), 1)
         self.assertEqual(len(self.alerts), 1)
         self.assertIn("read timeout", self.alerts[0][1])
+
+    def _moved_then(self, error, status="Completed"):
+        """The bank answers only after someone else has already moved the order on."""
+        def answer(*args, **kwargs):
+            self.db.set_value(DOCTYPE, ORDER, {"status": status})
+            self.db.commit()
+            raise error
+        return answer
+
+    def test_a_definitive_rejection_does_not_overwrite_an_order_that_left_processing(self):
+        """Writing Failed blindly here would clear invoice_lock on an order the bank may hold."""
+        self.add_order("Approved")
+        self.client.responses["send_pix"] = self._moved_then(
+            _ps_mod.InterAPIError("API error (HTTP 422)", status_code=422, response_body={}),
+        )
+
+        result = self.execute()
+
+        self.assertEqual(result["status"], "skipped")
+        row = self.order()
+        self.assertEqual((row["status"], row["invoice_lock"]), ("Completed", INVOICE))
+        self.assertEqual(self.alerts, [])
+
+    def test_an_ambiguous_outcome_does_not_overwrite_an_order_that_left_processing(self):
+        self.add_order("Approved")
+        self.client.responses["send_pix"] = self._moved_then(
+            _ps_mod.InterAmbiguousResultError("read timeout on POST /banking/v2/pix"),
+        )
+
+        result = self.execute()
+
+        self.assertEqual(result["status"], "skipped")
+        row = self.order()
+        self.assertEqual((row["status"], row["invoice_lock"]), ("Completed", INVOICE))
 
     def test_a_definitive_rejection_is_failed_with_the_bank_message(self):
         self.add_order("Approved")
@@ -1483,6 +1554,9 @@ class TestCron(ServiceCase):
         self.run_cron()
 
         self.assertEqual(self.sends(), [])
+        # Not sending in-process is only half of it: the incident was an hourly job handing orders
+        # back to the execution path. Queueing one is the same defect, one worker removed.
+        self.assertEqual(self.enqueue.call_count, 0, "the cron queued an execution")
         self.assertEqual(self.client.i2_violations, [])
         self.assertEqual(len(self.bank_calls("get_pix_payment")), 2, "the matrix must exercise the polling branch")
         self.assertEqual(len(self.bank_calls("find_barcode_payments")), 2)

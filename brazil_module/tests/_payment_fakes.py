@@ -553,9 +553,12 @@ class FakeSubmittedDoc:
 
     def save(self, *args, **kwargs):
         stored = self._db.row(self.doctype, self.name)
+        # Record the attempt BEFORE validating. A save on a submitted order is exactly the defect
+        # that caused the incident, it always raises, and every caller swallows that exception - so
+        # recording it afterwards would make "the service never saved" an assertion that cannot fail.
+        self._db.events.append(("save", self.doctype, self.name))
         if stored.get("docstatus") == 1:
             self._validate_update_after_submit(stored)
-        self._db.events.append(("save", self.doctype, self.name))
         stored.update(copy.deepcopy(self._values))
         stored["modified"] = self._db._next_modified(stored.get("modified"))
         self._values["modified"] = stored["modified"]

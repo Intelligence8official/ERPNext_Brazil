@@ -205,6 +205,15 @@ _WHITELIST_AFTER_LOAD = frappe.__dict__.get("whitelist", _MISSING)
 InterPaymentOrder = controller.InterPaymentOrder
 
 
+def _fixture_lock(status: str, docstatus: int, fields: dict):
+    """Restated on purpose: deriving it from ``is_blocking`` would let the fixture drift with it."""
+    if docstatus >= 2 or status in ("Failed", "Cancelled"):
+        return None
+    if status == "Completed" and fields.get("payment_entry"):
+        return None
+    return fields["purchase_invoice"]
+
+
 class ControllerCase(unittest.TestCase):
     """An enabled integration, a payable invoice, and a fake payment service (T4's names)."""
 
@@ -254,8 +263,7 @@ class ControllerCase(unittest.TestCase):
         """A stored order. ``ORDER`` pays ``INVOICE``; any other name pays an invoice of its own
         (``invoice_lock`` is unique), unless the test says which."""
         fields.setdefault("purchase_invoice", INVOICE if name == ORDER else f"PINV-OF-{name}")
-        blocking = docstatus < 2 and guards.is_blocking(status, fields.get("payment_entry"))
-        fields.setdefault("invoice_lock", fields["purchase_invoice"] if blocking else None)
+        fields.setdefault("invoice_lock", _fixture_lock(status, docstatus, fields))
         self.db.add(DOCTYPE, name, status=status, docstatus=docstatus, **fields)
         return self.db.row(DOCTYPE, name)
 
@@ -578,7 +586,8 @@ class TestCancel(ControllerCase):
                 name = f"IPO-{db_status}"
                 self.add_row(name, status=db_status)
                 self.make_order(name=name, status="Processing", docstatus=2).before_cancel()
-        self.assertTrue(all(read["for_update"] for read in self.db.reads if read["doctype"] == DOCTYPE))
+        locked = [read for read in self.db.reads if read["doctype"] == DOCTYPE and read["for_update"]]
+        self.assertEqual(len(locked), len(CANCELLABLE_STATUSES), "every veto decision must read under a lock")
 
     def test_an_unknown_order_cannot_be_cancelled(self):
         with self.assertRaises(ThrownError):

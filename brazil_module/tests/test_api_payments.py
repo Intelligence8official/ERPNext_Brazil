@@ -150,6 +150,15 @@ class FakeNewOrder:
         self._db.events.append(("submit", DOCTYPE, self.name))
 
 
+def _fixture_lock(status: str, docstatus: int, fields: dict):
+    """Restated on purpose: deriving it from ``is_blocking`` would let the fixture drift with it."""
+    if docstatus >= 2 or status in ("Failed", "Cancelled"):
+        return None
+    if status == "Completed" and fields.get("payment_entry"):
+        return None
+    return fields["purchase_invoice"]
+
+
 class ApiCase(unittest.TestCase):
     """An enabled integration, a payable invoice, its supplier and the company's Inter account."""
 
@@ -219,8 +228,7 @@ class ApiCase(unittest.TestCase):
 
     def add_order(self, status="Approved", name=ORDER, docstatus=1, **fields):
         fields.setdefault("purchase_invoice", INVOICE)
-        blocking = docstatus < 2 and _guards.is_blocking(status, fields.get("payment_entry"))
-        fields.setdefault("invoice_lock", fields["purchase_invoice"] if blocking else None)
+        fields.setdefault("invoice_lock", _fixture_lock(status, docstatus, fields))
         self.db.add(DOCTYPE, name, status=status, docstatus=docstatus, payment_type="PIX", amount=16800.0, **fields)
 
     def stored_orders(self):
@@ -538,6 +546,26 @@ class TestExecutePaymentThroughTheRealController(ApiCase):
 
     def order_writes(self):
         return [event for event in self.events("set_value") if event[1] == DOCTYPE]
+
+    def test_a_forged_status_in_the_request_document_is_ignored(self):
+        """``run_doc_method`` rebuilds the document from the browser's JSON, so it can say anything.
+
+        The other tests here load the document FROM the row, so ``self.status`` and the stored
+        status always agree - they cannot tell a database re-read from a trusting one.
+        """
+        self.add_order("Needs Verification")
+        order = InterPaymentOrder.__new__(InterPaymentOrder)
+        for key, value in self.db.row(DOCTYPE, ORDER).items():
+            setattr(order, key, value)
+        order.check_permission = self.check_permission
+        order.status, order.docstatus = "Approved", 1  # what the browser claims
+        _shadow_frappe(self, get_doc=MagicMock(return_value=order))
+
+        with self.assertRaises(Thrown):
+            api.execute_payment(ORDER)
+
+        self.enqueue.assert_not_called()
+        self.assertEqual(self.order_writes(), [])
 
     def test_an_approved_order_is_queued_once_as_its_own_deduplicated_job(self):
         self.add_order("Approved")

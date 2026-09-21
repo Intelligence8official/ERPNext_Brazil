@@ -266,10 +266,12 @@ class TestLogApiCall(unittest.TestCase):
             api_module="Auth",
         )
 
-        # Check the request_body saved doesn't contain client_secret
+        # No `if isinstance(...)`: behind a type guard the production code controls, storing the
+        # body as a dict - secrets and all - would leave this test green.
         saved_body = log_doc.request_body
-        if isinstance(saved_body, str):
-            self.assertNotIn("secret123", saved_body)
+        self.assertIsInstance(saved_body, str)
+        self.assertNotIn("secret123", saved_body)
+        self.assertIn("client_credentials", saved_body, "the harmless part of the body must survive")
 
 
 class TestAPIMethodPaths(unittest.TestCase):
