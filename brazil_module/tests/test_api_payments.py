@@ -475,10 +475,24 @@ class TestCreateWithoutAnInvoice(ApiCase):
         self.assertEqual((order["recipient_name"], order["recipient_cpf_cnpj"]), ("Fornecedor Ltda", "12345678000190"))
         self.assertEqual(self.events("insert", "submit"), [("insert", DOCTYPE, result["payment_order"])])
 
-    def test_a_boleto_keeps_its_barcode(self):
-        result = self.create(payment_type="Boleto Payment", pix_key="", barcode=BARCODE)
+    def test_a_boleto_keeps_its_barcode_and_its_due_date(self):
+        """The due date is now mandatory (the bank requires dataVencimento), so it must arrive.
 
-        self.assertEqual(self.db.row(DOCTYPE, result["payment_order"])["barcode"], BARCODE)
+        Without a Purchase Invoice there is nothing to take it from: dropping it here would make
+        every boleto order created through this endpoint impossible to save.
+        """
+        result = self.create(
+            payment_type="Boleto Payment", pix_key="", barcode=BARCODE, boleto_due_date="2026-09-25",
+        )
+
+        order = self.db.row(DOCTYPE, result["payment_order"])
+        self.assertEqual(result["status"], "success", result)
+        self.assertEqual((order["barcode"], str(order["boleto_due_date"])), (BARCODE, "2026-09-25"))
+
+    def test_a_scheduled_date_is_not_dropped(self):
+        result = self.create(scheduled_date="2026-09-25")
+
+        self.assertEqual(str(self.db.row(DOCTYPE, result["payment_order"])["scheduled_date"]), "2026-09-25")
 
     def test_the_invoice_service_is_not_involved(self):
         service = MagicMock(name="create_payment_order_for_invoice")

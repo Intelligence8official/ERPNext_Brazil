@@ -36,6 +36,9 @@ _BANK_ID = re.compile(r'"(?:codigoSolicitacao|codigoTransacao)"\s*:\s*"([^"]+)"'
 _LOCK_FIELDS = ["name", "status", "payment_entry", "purchase_invoice", "invoice_lock"]
 
 
+API_LOG_SCAN_LIMIT = 50
+
+
 def execute():
     for name in frappe.get_all(
         DOCTYPE, filters={"docstatus": 1, "status": STUCK_STATUS}, pluck="name", order_by="creation asc"
@@ -103,6 +106,9 @@ def _logged_bank_ids(order: dict) -> list[str]:
             filters={"request_body": ["like", f"%{token}%"]},
             fields=["name", "creation", "timestamp", "request_body", "response_body"],
             order_by="creation asc",
+            # A leading wildcard cannot use an index and get_all is unbounded by default; this
+            # runs inside bench migrate, over a table of long text.
+            limit=API_LOG_SCAN_LIMIT,
         ):
             if mentions.search(row.get("request_body") or ""):
                 rows[row.get("name")] = row

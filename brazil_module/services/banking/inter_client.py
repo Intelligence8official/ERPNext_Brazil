@@ -51,6 +51,15 @@ _IDEMPOTENCY_KEY_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 PAYMENT_DATE_FILTERS = ("INCLUSAO", "PAGAMENTO", "VENCIMENTO")
 
 
+DEFAULT_MAX_RETRIES = 3
+
+
+def _retries(max_retries: int | None) -> int:
+    """``None`` keeps the default. A caller running inside a web request passes 0: the retry policy
+    sleeps in the worker, and no click in the desk should hold one of those for minutes."""
+    return DEFAULT_MAX_RETRIES if max_retries is None else max_retries
+
+
 class InterAPIClient:
     """Low-level HTTP client for Banco Inter API.
 
@@ -218,14 +227,15 @@ class InterAPIClient:
         )
         return _as_dict(result)
 
-    def get_pix_payment(self, codigo_solicitacao: str) -> dict:
+    def get_pix_payment(self, codigo_solicitacao: str, max_retries: int | None = None) -> dict:
         """Get an outbound PIX payment by the ``codigoSolicitacao`` of the POST.
 
         The status is in ``transacaoPix.status``. The bank only answers for
         payments of the last 90 days.
         """
         return self._request(
-            "GET", f"/banking/v2/pix/{codigo_solicitacao}", api_module="Payment"
+            "GET", f"/banking/v2/pix/{codigo_solicitacao}", api_module="Payment",
+            max_retries=_retries(max_retries),
         )
 
     # ── TED / Payments ─────────────────────────────────────────────────
@@ -264,6 +274,7 @@ class InterAPIClient:
         start_date: date | str | None = None,
         end_date: date | str | None = None,
         filter_date_by: str = "INCLUSAO",
+        max_retries: int | None = None,
     ) -> list[dict]:
         """Search boleto payments (``GET /banking/v2/pagamento``).
 
@@ -286,7 +297,10 @@ class InterAPIClient:
             params["dataFim"] = _iso_date(end_date)
         params["filtrarDataPor"] = filter_date_by
 
-        response = self._request("GET", "/banking/v2/pagamento", params=params, api_module="Payment")
+        response = self._request(
+            "GET", "/banking/v2/pagamento", params=params, api_module="Payment",
+            max_retries=_retries(max_retries),
+        )
         if not isinstance(response, list):
             return []
         return [payment for payment in response if isinstance(payment, dict)]
@@ -605,7 +619,7 @@ class InterAPIClient:
             # Never let logging failures break the main flow: the caller must see
             # the bank's answer (or the real error), not a logging problem.
             try:
-                frappe.log_error(str(e), "Inter API Log Error")
+                frappe.log_error(title="Inter API Log Error", message=str(e))
             except Exception:
                 pass
 

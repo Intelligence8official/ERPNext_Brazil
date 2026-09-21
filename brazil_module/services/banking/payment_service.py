@@ -55,6 +55,9 @@ REQUEST_MAX_AGE = timedelta(minutes=15)
 STALE_PROCESSING_AFTER = timedelta(minutes=30)
 AWAITING_BANK_MAX_AGE = timedelta(days=85)  # GET /banking/v2/pix/{id} only covers 90 days
 MAX_POLLS_PER_RUN = 15
+# The hourly job runs on the "default" queue, where RQ kills it at 300 s. One hung poll can burn
+# 270 s on its own, so stop asking the bank before the death penalty rather than lose the run.
+POLL_BUDGET = timedelta(seconds=240)
 PIX_DESCRIPTION_LIMIT = 140
 BARCODE_LENGTHS = (44, 47, 48)
 ERROR_LOG_TITLE_LENGTH = 140
@@ -196,7 +199,28 @@ def _prepare_send(order: dict) -> tuple:
             raise _NothingSent(reason)
     _check_inter_account(order)
     payload = _build_payload(order)
-    return InterAPIClient(order["inter_company_account"]), payload
+    client = InterAPIClient(order["inter_company_account"])
+    _check_certificate(client, order)
+    return client, payload
+
+
+def _check_certificate(client, order: dict) -> None:
+    """Resolve the mTLS certificate HERE, where a failure still means nothing was sent.
+
+    The client resolves it inside the request, and a missing or moved file raises a plain
+    ``FileNotFoundError`` there - neither an ``InterAPIError`` nor an ``InterAuthError``. It would
+    land in the "the request may be at the bank" branch and freeze the invoice behind a
+    ``Needs Verification`` that asks a person to check a statement for a payment no socket ever
+    carried.
+    """
+    try:
+        client.auth.get_cert_paths()
+    except Exception as error:
+        raise _NothingSent(
+            _("The certificate of Inter Company Account {0} could not be read: {1}").format(
+                order.get("inter_company_account"), error
+            )
+        ) from error
 
 
 def _check_inter_account(order: dict) -> None:
@@ -368,8 +392,12 @@ def _follow_up(order: dict, accepted: dict) -> dict:
 # Polling: never sends, never fails an order from absence
 # ---------------------------------------------------------------------------
 
-def poll_bank_status(payment_order_name: str) -> dict:
-    """Ask the bank about an ``Awaiting Bank`` order and apply the mapping of spec 3."""
+def poll_bank_status(payment_order_name: str, *, interactive: bool = False) -> dict:
+    """Ask the bank about an ``Awaiting Bank`` order and apply the mapping of spec 3.
+
+    ``interactive`` is set by the desk button: it asks once instead of retrying, because the
+    retries sleep in the caller and the operator can simply click again.
+    """
     if not is_integration_enabled():
         return {"status": "blocked", "message": _("The Banco Inter integration is disabled")}
     order = frappe.db.get_value(DOCTYPE, payment_order_name, ORDER_FIELDS, as_dict=True)
@@ -380,7 +408,7 @@ def poll_bank_status(payment_order_name: str) -> dict:
     if order.get("docstatus") != 1 or order.get("status") != "Awaiting Bank":
         return {"status": "skipped", "order_status": order.get("status")}
     try:
-        answer = _ask_bank(order, order["approval_code"])
+        answer = _ask_bank(order, order["approval_code"], max_retries=0 if interactive else None)
     except JobTimeoutException:
         raise
     except Exception as error:
@@ -390,15 +418,20 @@ def poll_bank_status(payment_order_name: str) -> dict:
     return _apply_bank_status(order, answer, expected_from=FROM_AWAITING_BANK)
 
 
-def _ask_bank(order: dict, bank_id: str) -> dict | None:
-    """The bank's view of ``bank_id``, or ``None`` when it shows nothing that is provably ours."""
+def _ask_bank(order: dict, bank_id: str, *, max_retries: int | None = None) -> dict | None:
+    """The bank's view of ``bank_id``, or ``None`` when it shows nothing that is provably ours.
+
+    ``max_retries=0`` is for the desk: the retry policy sleeps in the calling process, and a person
+    clicking a button must not hold a web worker for minutes.
+    """
     payment_type = order.get("payment_type")
     if payment_type not in (PIX, BOLETO):
         return None
     client = InterAPIClient(order["inter_company_account"])
     if payment_type == PIX:
-        return _pix_answer(client.get_pix_payment(bank_id), bank_id)
-    return _boleto_answer(client.find_barcode_payments(**_boleto_query(order, bank_id)), bank_id)
+        return _pix_answer(client.get_pix_payment(bank_id, max_retries=max_retries), bank_id)
+    query = {**_boleto_query(order, bank_id), "max_retries": max_retries}
+    return _boleto_answer(client.find_barcode_payments(**query), bank_id)
 
 
 def _pix_answer(response, bank_id: str) -> dict | None:
@@ -454,6 +487,8 @@ def _poll_error(order: dict, error: Exception) -> dict:
 
 
 def _classify(payment_type: str, bank_status: str) -> str:
+    # Normalise only for the decision: _store_bank_status keeps the bank's own spelling for audit.
+    bank_status = str(bank_status or "").strip().upper()
     if payment_type == PIX:
         paid, rejected, human = PIX_PAID, PIX_REJECTED, PIX_NEEDS_HUMAN
     else:
@@ -793,12 +828,15 @@ def _resolve_at_bank(order: dict, reference: str, paid_on, note: str) -> dict:
     if not recorded:
         frappe.throw(_("The order changed while it was being resolved. Reload it."))
     _comment(name, _resolution_text("at the bank", reference, note))
+    # _apply_bank_status rolls back when the bank status has not moved, and that would throw away
+    # the operator's attestation along with it.
+    _best_effort(frappe.db.commit)
     return _apply_bank_status(order, answer, expected_from=FROM_AWAITING_BANK)
 
 
 def _confirmed_by_bank(order: dict, reference: str) -> dict:
     try:
-        answer = _ask_bank(order, reference)
+        answer = _ask_bank(order, reference, max_retries=0)  # always a person at a keyboard
     except JobTimeoutException:
         raise
     except Exception as error:
@@ -911,20 +949,31 @@ def _expire_old_waiting_orders() -> list:
 
 def _poll_waiting_orders(waiting: list) -> None:
     batch = _polling_window(waiting)
-    if len(batch) < len(waiting):
-        polled = {order.get("name") for order in batch}
-        left = [order.get("name") for order in waiting if order.get("name") not in polled]
-        frappe.logger().warning(
-            f"Inter payments: {len(waiting)} orders await the bank, {len(batch)} polled this run; "
-            f"left for later: {left}"
-        )
+    deadline = now_datetime() + POLL_BUDGET
     forbidden = set()  # a missing read scope fails every order of that kind: one alert is enough
+    polled = []
     for order in batch:
+        if now_datetime() >= deadline:
+            break
+        polled.append(order)
         if order.get("payment_type") in forbidden:
             continue
         result = _guarded(poll_bank_status, order.get("name"))
         if result and result.get("http_status") == 403:
             forbidden.add(order.get("payment_type"))
+    _report_orders_left(waiting, polled)
+
+
+def _report_orders_left(waiting: list, polled: list) -> None:
+    """No silent cap: an order nobody asked about this run has to be visible somewhere."""
+    if len(polled) == len(waiting):
+        return
+    asked = {order.get("name") for order in polled}
+    left = [order.get("name") for order in waiting if order.get("name") not in asked]
+    frappe.logger().warning(
+        f"Inter payments: {len(waiting)} orders await the bank, {len(polled)} polled this run; "
+        f"left for the next run: {left}"
+    )
 
 
 def _polling_window(waiting: list) -> list:
@@ -1032,4 +1081,6 @@ def _restore_invoice_lock(order_name: str, order: dict) -> None:
         "Make sure the invoice is not paid twice."
     ).format(invoice, detail)
     subject = _("Inter payment {0}: check invoice {1}").format(order_name, invoice)
-    _best_effort(alert_operator, subject, message, order_name)
+    # Alerting means HTTP (Telegram waits up to 10 s, twice). This runs inside the Payment Entry's
+    # cancel transaction with the order row locked, so hold it until the commit frees both.
+    _best_effort(frappe.db.after_commit.add, lambda: _best_effort(alert_operator, subject, message, order_name))

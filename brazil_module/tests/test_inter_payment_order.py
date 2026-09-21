@@ -629,7 +629,8 @@ class TestDelegation(ControllerCase):
         result = order.check_bank_status()
 
         order.check_permission.assert_called_once_with("write")
-        self.service.poll_bank_status.assert_called_once_with(ORDER)
+        # interactive: the desk must not sit through the client's retry sleeps
+        self.service.poll_bank_status.assert_called_once_with(ORDER, interactive=True)
         self.assertEqual(result, {"status": "awaiting_bank"})
         self.assertEqual(self.writes(), [])
 

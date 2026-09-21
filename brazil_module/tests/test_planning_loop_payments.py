@@ -617,7 +617,7 @@ class SqliteDB(FakeDB):
     SCHEMA = """
         CREATE TABLE `tabPurchase Invoice`(name, supplier, supplier_name, docstatus, outstanding_amount, due_date);
         CREATE TABLE `tabPayment Entry`(name, docstatus);
-        CREATE TABLE `tabPayment Entry Reference`(parent, reference_name);
+        CREATE TABLE `tabPayment Entry Reference`(parent, reference_doctype, reference_name);
         CREATE TABLE `tabInter Payment Order`(name, purchase_invoice, docstatus, status, payment_entry);
     """
 
@@ -648,10 +648,12 @@ class SqliteDB(FakeDB):
             (f"IPO-{invoice}-{status}", invoice, docstatus, status, payment_entry),
         )
 
-    def payment_entry(self, invoice, docstatus):
+    def payment_entry(self, invoice, docstatus, reference_doctype="Purchase Invoice"):
         name = f"PE-{invoice}"
         self.lite.execute("INSERT INTO `tabPayment Entry` VALUES (?, ?)", (name, docstatus))
-        self.lite.execute("INSERT INTO `tabPayment Entry Reference` VALUES (?, ?)", (name, invoice))
+        self.lite.execute(
+            "INSERT INTO `tabPayment Entry Reference` VALUES (?, ?, ?)", (name, reference_doctype, invoice)
+        )
 
 
 FREE = ("PI-FREE", "PI-FAILED", "PI-CANCELLED", "PI-COMPLETED-WITH-ENTRY", "PI-CANCELLED-ENTRY")
@@ -757,6 +759,19 @@ class TestSqlGuardAgreesWithIsBlocking(unittest.TestCase):
                         "SELECT pi.name FROM `tabPurchase Invoice` pi WHERE 1 = 1 " + _pl_mod._NO_PAYMENT_UNDER_WAY_SQL
                     )
                     self.assertEqual(rows == [], _guards.is_blocking(status, payment_entry))
+
+    def test_only_a_reference_to_a_purchase_invoice_counts(self):
+        """Names are unique per doctype, not across them: an Expense Claim called ACC-PINV-... is
+        a different document, and must not make the invoice look like it is already being paid."""
+        db = SqliteDB()
+        db.invoice("PI-X")
+        db.payment_entry("PI-X", docstatus=1, reference_doctype="Expense Claim")
+
+        rows = db.sql(
+            "SELECT pi.name FROM `tabPurchase Invoice` pi WHERE 1 = 1 " + _pl_mod._NO_PAYMENT_UNDER_WAY_SQL
+        )
+
+        self.assertEqual(rows, [("PI-X",)], "the invoice is still free to pay")
 
     def test_the_fragment_is_built_from_the_shared_constant(self):
         quoted = ", ".join(f"'{status}'" for status in _guards.NON_BLOCKING_STATUSES)

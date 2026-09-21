@@ -162,7 +162,7 @@ class InterPaymentOrder(Document):
 
         from brazil_module.services.banking.payment_service import poll_bank_status
 
-        return poll_bank_status(self.name)
+        return poll_bank_status(self.name, interactive=True)
 
     @frappe.whitelist()
     def resolve_verification(self, outcome, bank_reference="", paid_on=None, note=""):

@@ -615,6 +615,20 @@ class TestPreSendGuards(ServiceCase):
 
         self.assert_failed_without_a_send(self.execute(), "IPO-2026-00001")
 
+    def test_a_certificate_that_cannot_be_read(self):
+        """A missing certificate opens no socket, so it must fail - not freeze the invoice.
+
+        The client resolves it inside the request, where a plain OSError would land in the
+        "the request may be at the bank" branch and leave a person checking a statement for a
+        payment that was never attempted.
+        """
+        self.add_order("Approved")
+        self.client.responses["get_cert_paths"] = FileNotFoundError(
+            "Could not resolve file path: /private/files/inter.crt"
+        )
+
+        self.assert_failed_without_a_send(self.execute(), "certificate")
+
     def test_a_pre_send_failure_does_not_overwrite_an_order_that_left_processing(self):
         """The compare-and-set earns its keep here: stamping Failed would free a live invoice.
 
@@ -1029,6 +1043,22 @@ class TestTheRegression(ServiceCase):
 # ---------------------------------------------------------------------------
 
 class TestPixPoll(ServiceCase):
+    def test_a_status_that_arrives_in_another_case_or_padded_still_decides(self):
+        """Every vocabulary the bank publishes is upper snake case, but "unknown" here means the
+        order keeps its invoice locked forever - so do not let a stray space cause that."""
+        for spelling in (" pago ", "Pago", "PAGO\n"):
+            with self.subTest(spelling=spelling):
+                self.setUp()
+                self.add_in_flight("Awaiting Bank")
+                self.client.responses["get_pix_payment"] = {
+                    "transacaoPix": {"status": spelling, "endToEnd": "E0041"}
+                }
+
+                _ps_mod.poll_bank_status(ORDER)
+
+                self.assertEqual(self.order()["status"], "Completed")
+                self.assertEqual(self.order()["bank_status"], spelling, "the audit keeps the bank's own text")
+
     def test_every_bank_status_lands_in_the_right_state(self):
         for expected, bank_statuses in PIX_STATUSES.items():
             for bank_status in bank_statuses:
@@ -1176,7 +1206,15 @@ class TestBoletoPoll(BoletoCase):
         self.assertEqual(self.client.calls, [("find_barcode_payments", {
             "codigo_transacao": BOLETO_ID, "filter_date_by": "INCLUSAO",
             "start_date": datetime.date(2026, 9, 17), "end_date": datetime.date(2026, 9, 19),
+            "max_retries": None,  # the cron may wait; the desk passes 0
         })])
+
+    def test_the_desk_asks_once_instead_of_sleeping_in_the_worker(self):
+        self.add_in_flight("Awaiting Bank")
+
+        _ps_mod.poll_bank_status(ORDER, interactive=True)
+
+        self.assertEqual(self.client.calls[0][1]["max_retries"], 0)
 
     def test_an_empty_list_or_a_list_without_our_payment_changes_nothing(self):
         for label, answer in (
@@ -1582,6 +1620,29 @@ class TestCron(ServiceCase):
         self.assertIn("20", warning)
         self.assertEqual(sum(name in warning for name in names), 5, "the orders left for a later run are named")
 
+    def test_polling_stops_before_the_job_is_killed(self):
+        """The hourly job lives on a queue that kills it at 300 s, and one hung poll can take 270.
+
+        Without a budget a slow bank costs the whole run: the stale-Processing rescue and every
+        other poll simply do not happen, hour after hour.
+        """
+        names = self.add_many("Awaiting Bank", 5)
+        clock = [NOW]
+        self._patch(_ps_mod, now_datetime=lambda: clock[0])
+        real_poll = _ps_mod.poll_bank_status
+
+        def slow(name, **kwargs):
+            clock[0] += datetime.timedelta(seconds=100)
+            return real_poll(name, **kwargs)
+
+        self._patch(_ps_mod, poll_bank_status=slow)
+
+        self.run_cron()
+
+        self.assertEqual(len(self.bank_calls("get_pix_payment")), 3, "240 s of budget, 100 s per poll")
+        warning = str(self.logger.warning.call_args)
+        self.assertEqual(sum(name in warning for name in names), 2, "the orders left behind are named")
+
     def test_the_window_moves_every_hour_so_no_order_starves(self):
         names = self.add_many("Awaiting Bank", 20)
         polled_orders = []
@@ -1704,6 +1765,10 @@ class TestOnPaymentEntryCancel(ServiceCase):
 
         row = self.db.row(DOCTYPE, ORDER)
         self.assertEqual((row["payment_entry"], row["invoice_lock"]), (None, None))
+        # Telling a human means HTTP, and this hook holds the order row locked inside the Payment
+        # Entry's own transaction: the alert has to wait for the commit that frees it.
+        self.assertEqual(self.alerts, [], "the alert went out while the row was still locked")
+        self.db.commit()
         self.assertEqual(len(self.alerts), 1)
         self.assertIn("IPO-2026-00009", self.alerts[0][1])
 
@@ -1717,7 +1782,19 @@ class TestOnPaymentEntryCancel(ServiceCase):
 
         row = self.db.row(DOCTYPE, ORDER)
         self.assertEqual((row["payment_entry"], row["invoice_lock"]), (None, None))
+        self.assertEqual(self.alerts, [])
+        self.db.commit()
         self.assertEqual(len(self.alerts), 1)
+
+    def test_a_rolled_back_cancel_alerts_nobody(self):
+        """Nothing was unlinked, so there is nothing to warn about."""
+        self.add_in_flight("Completed", payment_entry="ACC-PAY-1")
+        self.add_in_flight("Awaiting Bank", name="IPO-2026-00009")
+
+        self.cancel()
+        self.db.rollback()
+
+        self.assertEqual(self.alerts, [])
 
     def test_the_hook_is_registered_next_to_the_submit_hook(self):
         events = _hooks.doc_events["Payment Entry"]

@@ -671,7 +671,7 @@ class TestFakeInterClientOtherCalls(unittest.TestCase):
         )
         self.assertEqual(
             client.calls,
-            [("get_pix_payment", "cs-1"), ("find_barcode_payments", {"codigo_transacao": "ct-1"})],
+            [("get_pix_payment", "cs-1", None), ("find_barcode_payments", {"codigo_transacao": "ct-1"})],
         )
 
     def test_read_defaults_are_still_in_flight_and_empty(self):

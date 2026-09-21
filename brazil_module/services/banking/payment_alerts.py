@@ -18,6 +18,13 @@ from frappe.utils import get_url_to_form
 
 from brazil_module.services.banking.payment_guards import DOCTYPE
 
+try:
+    from rq.timeouts import JobTimeoutException
+except ImportError:  # rq always comes with Frappe; the unit tests run without it
+
+    class JobTimeoutException(Exception):
+        """Keeps ``except JobTimeoutException`` valid where rq is not installed."""
+
 MANAGER_ROLE = "Banco Inter Manager"
 FALLBACK_USER = "Administrator"
 AGENT_SETTINGS = "I8 Agent Settings"
@@ -64,6 +71,10 @@ def _order_link(order_name: str) -> str | None:
 def _run_channel(channel: str, send, *args) -> None:
     try:
         send(*args)
+    except JobTimeoutException:
+        # Telegram waits up to 10 s twice. RQ's death penalty must not be swallowed here: the rest
+        # of the module lets it through so the job stops in order instead of being killed later.
+        raise
     except Exception as error:
         _report_channel_failure(channel, error)
 
@@ -72,6 +83,8 @@ def _report_channel_failure(channel: str, error: Exception) -> None:
     """A failed channel is never silent: Error Log, and the worker's stderr as the last resort."""
     try:
         frappe.log_error(title=f"Inter payment alert: {channel} failed", message=repr(error))
+    except JobTimeoutException:
+        raise
     except Exception:
         try:
             print(f"Inter payment alert: {channel} failed: {error!r}", file=sys.stderr)

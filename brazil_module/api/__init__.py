@@ -546,7 +546,9 @@ def create_payment_order(
     try:
         if purchase_invoice:
             return _create_payment_order_for_invoice(purchase_invoice, payment_type, pix_key, barcode, kwargs)
-        return _create_standalone_payment_order(payment_type, amount, company, party_type, party, pix_key, barcode)
+        return _create_standalone_payment_order(
+            payment_type, amount, company, party_type, party, pix_key, barcode, kwargs
+        )
     except Exception as e:
         return _payment_order_not_created(e)
 
@@ -569,7 +571,8 @@ def _create_payment_order_for_invoice(
 
 
 def _create_standalone_payment_order(
-    payment_type: str, amount: float, company: str, party_type: str, party: str, pix_key: str, barcode: str
+    payment_type: str, amount: float, company: str, party_type: str, party: str, pix_key: str,
+    barcode: str, options: dict,
 ) -> dict:
     from brazil_module.services.banking.payment_guards import get_inter_account_for_company
 
@@ -586,10 +589,14 @@ def _create_standalone_payment_order(
     order.party_type = party_type or None
     order.party = party or None
 
+    order.scheduled_date = options.get("scheduled_date") or None
     if payment_type == "PIX":
         order.pix_key = pix_key
     elif payment_type == "Boleto Payment":
         order.barcode = barcode
+        # The API requires dataVencimento, so the controller does too: without passing it through,
+        # every boleto order created without an invoice would be refused.
+        order.boleto_due_date = options.get("boleto_due_date") or None
 
     # Set recipient info from party
     if party_type == "Supplier" and party:

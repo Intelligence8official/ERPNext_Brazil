@@ -817,7 +817,23 @@ class TestPaymentQueries(_ClientTestCase):
 
     def test_get_pix_payment_parameter_is_not_an_e2e_id(self):
         parameters = list(inspect.signature(InterAPIClient.get_pix_payment).parameters)
-        self.assertEqual(parameters, ["self", "codigo_solicitacao"])
+        self.assertEqual(parameters, ["self", "codigo_solicitacao", "max_retries"])
+
+    def test_a_query_can_be_asked_not_to_sleep(self):
+        """The desk calls these inside a web request, where the retry policy would block a worker."""
+        self.http.return_value = _resp(500, {})
+
+        for call in (
+            lambda: self.client.get_pix_payment("SOL-123", max_retries=0),
+            lambda: self.client.find_barcode_payments(codigo_transacao=self.TX, max_retries=0),
+        ):
+            with self.subTest(call=call):
+                self.http.reset_mock()
+                self.sleep.reset_mock()
+                with self.assertRaises(InterAPIError):
+                    call()
+                self.assertEqual(self.http.call_count, 1)
+                self.sleep.assert_not_called()
 
     def test_find_by_transaction_code_and_dates(self):
         self.http.return_value = _resp(200, [{"codigoTransacao": self.TX, "statusPagamento": "PAGO"}])

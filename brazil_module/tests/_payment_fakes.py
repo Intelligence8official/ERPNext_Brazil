@@ -236,6 +236,7 @@ class FakeDB:
         self._now = now or datetime.datetime.now
         self._working: dict[str, dict[str, dict]] = {}
         self._committed: dict[str, dict[str, dict]] = {}
+        self.after_commit = _Callbacks()
 
     # -- test set-up and inspection -------------------------------------------------
 
@@ -331,10 +332,12 @@ class FakeDB:
     def commit(self) -> None:
         self.events.append(("commit",))
         self._committed = copy.deepcopy(self._working)
+        self.after_commit.run()
 
     def rollback(self) -> None:
         self.events.append(("rollback",))
         self._working = copy.deepcopy(self._committed)
+        self.after_commit.reset()
 
     # -- internals ------------------------------------------------------------------
 
@@ -368,6 +371,37 @@ class FakeDB:
 # FakeInterClient
 # ---------------------------------------------------------------------------
 
+class _FakeAuth:
+    """``client.auth``: only what the payment path touches."""
+
+    def __init__(self, client):
+        self._client = client
+
+    def get_cert_paths(self) -> tuple[str, str]:
+        # Kept out of ``calls``: that list is what the BANK was asked, and a test reads payloads
+        # from it positionally.
+        self._client.cert_calls.append(True)
+        return self._client._respond("get_cert_paths")
+
+
+class _Callbacks:
+    """``frappe.db.after_commit``: work that must wait for the transaction to end."""
+
+    def __init__(self):
+        self._functions: list = []
+
+    def add(self, func) -> None:
+        self._functions.append(func)
+
+    def run(self) -> None:
+        pending, self._functions = self._functions, []
+        for func in pending:
+            func()
+
+    def reset(self) -> None:
+        self._functions = []
+
+
 class FakeInterClient:
     """The slice of ``InterAPIClient`` the payment path uses. It never touches the network.
 
@@ -387,9 +421,12 @@ class FakeInterClient:
         "pay_barcode": {"statusPagamento": "AGUARDANDO_APROVACAO", "codigoTransacao": "fake-codigo-transacao"},
         "get_pix_payment": {"transacaoPix": {"status": "AGUARDANDO_APROVACAO"}},
         "find_barcode_payments": [],
+        "get_cert_paths": ("/private/files/inter.crt", "/private/files/inter.key"),
     }
     # Kept equal to the real client by test_payment_fakes.py (it reads inter_client.py).
-    FIND_BARCODE_PAYMENTS_KEYWORDS = ("barcode", "codigo_transacao", "start_date", "end_date", "filter_date_by")
+    FIND_BARCODE_PAYMENTS_KEYWORDS = (
+        "barcode", "codigo_transacao", "start_date", "end_date", "filter_date_by", "max_retries",
+    )
     PAYMENT_DATE_FILTERS = ("INCLUSAO", "PAGAMENTO", "VENCIMENTO")
 
     def __init__(self, db: FakeDB, doctype_row: tuple | None = None):
@@ -398,6 +435,10 @@ class FakeInterClient:
         self.responses: dict = {}
         self.calls: list[tuple] = []
         self.i2_violations: list[str] = []
+        self.cert_calls: list[bool] = []
+        # The real client resolves the mTLS certificate through auth, and a missing file raises a
+        # plain OSError there - which is why the service resolves it among its pre-send guards.
+        self.auth = _FakeAuth(self)
 
     def send_pix(self, payment_data: dict, idempotency_key: str) -> dict:
         if not isinstance(idempotency_key, str) or not _IDEMPOTENCY_KEY.match(idempotency_key):
@@ -413,8 +454,8 @@ class FakeInterClient:
         self._assert_intent_committed(None)
         return self._respond("pay_barcode", payment_data)
 
-    def get_pix_payment(self, codigo_solicitacao: str) -> dict:
-        self.calls.append(("get_pix_payment", codigo_solicitacao))
+    def get_pix_payment(self, codigo_solicitacao: str, max_retries: int | None = None) -> dict:
+        self.calls.append(("get_pix_payment", codigo_solicitacao, max_retries))
         self.db.events.append(("bank", "get_pix_payment", codigo_solicitacao))
         return self._respond("get_pix_payment", codigo_solicitacao)
 

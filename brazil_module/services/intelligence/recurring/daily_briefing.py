@@ -282,7 +282,7 @@ def _payment_orders_section(now: datetime | None = None) -> str:
         return "\n".join([PAYMENT_ORDERS_TITLE, *lines]) if lines else ""
     except Exception as e:
         try:
-            frappe.log_error(str(e), "I8 Briefing Payment Orders Error")
+            frappe.log_error(title="I8 Briefing Payment Orders Error", message=str(e))
         except Exception:
             # Writing the Error Log is a database write too: the section still has to come back.
             pass
@@ -302,7 +302,7 @@ def _send_payment_orders_left_out(formatted: str) -> None:
             _send_via_telegram(section)
     except Exception as e:
         try:
-            frappe.log_error(str(e), "I8 Briefing Payment Orders Error")
+            frappe.log_error(title="I8 Briefing Payment Orders Error", message=str(e))
         except Exception:
             pass
 

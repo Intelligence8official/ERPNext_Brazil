@@ -38,6 +38,7 @@ _NO_PAYMENT_UNDER_WAY_SQL = f"""
         SELECT 1 FROM `tabPayment Entry Reference` per
         JOIN `tabPayment Entry` pe ON pe.name = per.parent
         WHERE per.reference_name = pi.name
+        AND per.reference_doctype = 'Purchase Invoice'
         AND pe.docstatus < 2
     )
     AND NOT EXISTS (
@@ -196,7 +197,7 @@ def check_overdue_payments():
             _notify_telegram("\n".join(lines))
 
     except Exception as e:
-        frappe.log_error(str(e), "I8 Planning Loop: Overdue Check Error")
+        frappe.log_error(title="I8 Planning Loop: Overdue Check Error", message=str(e))
 
 
 def process_pending_nfs():
@@ -257,7 +258,7 @@ def process_pending_nfs():
                 processed += 1
             except Exception as e:
                 errors += 1
-                frappe.log_error(str(e), f"I8 NF Processing Error: {nf['name']}")
+                frappe.log_error(str(e), f"I8 NF Processing Error: {nf_doc.name}")
 
         if errors > 0:
             _notify_telegram(f"NFs enfileiradas: {processed} ok, {errors} erros. O agente processara em background.")
@@ -304,7 +305,7 @@ def check_urgent_payments():
             except Exception:
                 pass
     except Exception as e:
-        frappe.log_error(str(e), "I8 Planning Loop: Urgent Payment Check Error")
+        frappe.log_error(title="I8 Planning Loop: Urgent Payment Check Error", message=str(e))
 
 
 def schedule_weekly_payments():
@@ -397,7 +398,7 @@ def _schedule_single_payment(inv: dict) -> dict:
     if mode in ("Credit Card",):
         return _handle_credit_card_payment(inv)
     if mode in ("Wire Transfer", "TED"):
-        return _schedule_ted_payment(inv, inv["supplier"])
+        return _schedule_ted_payment(inv)
     return {"status": "skipped", "invoice": invoice_name, "reason": f"Unknown payment mode: {mode}"}
 
 
@@ -493,7 +494,7 @@ def _queue_when_approved(result: dict) -> dict:
     return {**result, "status": "queued"}
 
 
-def _schedule_ted_payment(inv: dict, supplier: str) -> dict:
+def _schedule_ted_payment(inv: dict) -> dict:
     """TED cannot be automated: Banco Inter's Banking API has no TED endpoint."""
     return {
         "status": "error",
