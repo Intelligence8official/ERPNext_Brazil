@@ -5,7 +5,6 @@ ACTION_ALLOWLIST = {
     "Purchase Invoice": ["create", "submit"],
     "Payment Entry": ["create", "submit"],
     "Journal Entry": ["create", "submit"],
-    "Inter Payment Order": ["create"],
     "Nota Fiscal": ["read", "update_status"],
     "Bank Transaction": ["read", "reconcile"],
     "Supplier": ["read", "create", "update"],

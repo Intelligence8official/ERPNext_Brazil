@@ -12,6 +12,39 @@ from datetime import date, timedelta
 
 import frappe
 
+from brazil_module.services.banking.payment_common import JobTimeoutException, bank_gl_account
+from brazil_module.services.banking.payment_guards import (
+    DOCTYPE as PAYMENT_ORDER_DOCTYPE,
+    NON_BLOCKING_STATUSES,
+    check_invoice_payable,
+    get_inter_account_for_company,
+    is_integration_enabled,
+)
+
+# "Nothing is paying this invoice": no Payment Entry (draft or submitted) and no *blocking*
+# Inter Payment Order. The order half is payment_guards.is_blocking() written in SQL: an order
+# blocks unless it is Failed / Cancelled, or Completed with a Payment Entry. A Failed order must
+# neither stop a new attempt nor silence an alert; an unknown (NULL) status blocks.
+_NON_BLOCKING_SQL = ", ".join(f"'{status}'" for status in NON_BLOCKING_STATUSES)
+_NO_PAYMENT_UNDER_WAY_SQL = f"""
+    AND NOT EXISTS (
+        SELECT 1 FROM `tabPayment Entry Reference` per
+        JOIN `tabPayment Entry` pe ON pe.name = per.parent
+        WHERE per.reference_name = pi.name
+        AND per.reference_doctype = 'Purchase Invoice'
+        AND pe.docstatus < 2
+    )
+    AND NOT EXISTS (
+        SELECT 1 FROM `tabInter Payment Order` ipo
+        WHERE ipo.purchase_invoice = pi.name
+        AND ipo.docstatus < 2
+        AND IFNULL(ipo.status, '') NOT IN ({_NON_BLOCKING_SQL})
+        AND NOT (IFNULL(ipo.status, '') = 'Completed' AND IFNULL(ipo.payment_entry, '') != '')
+    )
+"""
+
+SUMMARY_TEXT_LIMIT = 160
+
 
 def hourly_check():
     """Scheduled job: runs every hour to check for pending work."""
@@ -134,28 +167,18 @@ def run_reconciliation(notify_always: bool = False):
 def check_overdue_payments():
     """Alert via Telegram if there are invoices overdue today WITHOUT any payment.
 
-    Excludes invoices that already have a Payment Entry (any status: draft, submitted).
-    Also excludes invoices that have an Inter Payment Order.
+    Excludes invoices that already have a Payment Entry (draft or submitted) or a blocking
+    Inter Payment Order. A Failed order does not silence the alert.
     """
     try:
         today = date.today()
-        newly_overdue = frappe.db.sql("""
+        newly_overdue = frappe.db.sql(f"""
             SELECT pi.name, pi.supplier_name, pi.outstanding_amount
             FROM `tabPurchase Invoice` pi
             WHERE pi.docstatus = 1
             AND pi.outstanding_amount > 0
             AND pi.due_date = %s
-            AND NOT EXISTS (
-                SELECT 1 FROM `tabPayment Entry Reference` per
-                JOIN `tabPayment Entry` pe ON pe.name = per.parent
-                WHERE per.reference_name = pi.name
-                AND pe.docstatus < 2
-            )
-            AND NOT EXISTS (
-                SELECT 1 FROM `tabInter Payment Order` ipo
-                WHERE ipo.purchase_invoice = pi.name
-                AND ipo.docstatus < 2
-            )
+            {_NO_PAYMENT_UNDER_WAY_SQL}
         """, today.isoformat(), as_dict=True)
 
         if newly_overdue:
@@ -167,7 +190,7 @@ def check_overdue_payments():
             _notify_telegram("\n".join(lines))
 
     except Exception as e:
-        frappe.log_error(str(e), "I8 Planning Loop: Overdue Check Error")
+        frappe.log_error(title="I8 Planning Loop: Overdue Check Error", message=str(e))
 
 
 def process_pending_nfs():
@@ -228,7 +251,7 @@ def process_pending_nfs():
                 processed += 1
             except Exception as e:
                 errors += 1
-                frappe.log_error(str(e), f"I8 NF Processing Error: {nf['name']}")
+                frappe.log_error(str(e), f"I8 NF Processing Error: {nf_doc.name}")
 
         if errors > 0:
             _notify_telegram(f"NFs enfileiradas: {processed} ok, {errors} erros. O agente processara em background.")
@@ -242,29 +265,20 @@ def process_pending_nfs():
 def check_urgent_payments():
     """Alert via Telegram if there are invoices due today or tomorrow without payment scheduled.
 
-    Excludes invoices that already have Payment Entry or Inter Payment Order.
+    Excludes invoices that already have a Payment Entry or a blocking Inter Payment Order.
+    A Failed order does not silence the alert.
     """
     try:
         today = date.today()
         tomorrow = today + timedelta(days=1)
 
-        urgent = frappe.db.sql("""
+        urgent = frappe.db.sql(f"""
             SELECT pi.name, pi.supplier_name, pi.outstanding_amount, pi.due_date
             FROM `tabPurchase Invoice` pi
             WHERE pi.docstatus = 1
             AND pi.outstanding_amount > 0
             AND pi.due_date IN (%s, %s)
-            AND NOT EXISTS (
-                SELECT 1 FROM `tabPayment Entry Reference` per
-                JOIN `tabPayment Entry` pe ON pe.name = per.parent
-                WHERE per.reference_name = pi.name
-                AND pe.docstatus < 2
-            )
-            AND NOT EXISTS (
-                SELECT 1 FROM `tabInter Payment Order` ipo
-                WHERE ipo.purchase_invoice = pi.name
-                AND ipo.docstatus < 2
-            )
+            {_NO_PAYMENT_UNDER_WAY_SQL}
         """, (today.isoformat(), tomorrow.isoformat()), as_dict=True)
 
         if urgent:
@@ -284,130 +298,101 @@ def check_urgent_payments():
             except Exception:
                 pass
     except Exception as e:
-        frappe.log_error(str(e), "I8 Planning Loop: Urgent Payment Check Error")
+        frappe.log_error(title="I8 Planning Loop: Urgent Payment Check Error", message=str(e))
 
 
 def schedule_weekly_payments():
-    """Schedule payments for invoices due this week. Runs on configured day.
+    """Create and queue the payments of the invoices due this week. Runs on the configured day.
 
-    Uses a cache-based lock to prevent concurrent execution from cron + manual trigger.
+    The scheduler never talks to the bank. Every invoice becomes an Inter Payment Order through
+    ``payment_service.create_payment_order_for_invoice`` and, when the order comes out
+    ``Approved``, its own execution job - which reports through its own alerts.
+    A cache-based lock prevents concurrent execution from cron + manual trigger.
     """
     if not frappe.db.get_single_value("I8 Agent Settings", "enabled"):
         return
     if not frappe.db.get_single_value("I8 Agent Settings", "auto_schedule_payments"):
         return
+    if not is_integration_enabled():  # the kill switch: Banco Inter Settings.enabled
+        return
+    if not _acquire_scheduling_lock():
+        return
 
-    # Prevent concurrent/duplicate execution (lock for 30 minutes)
+    invoices = _invoices_due_this_week(date.today())
+    if not invoices:
+        return
+
+    results = [_schedule_in_own_transaction(inv) for inv in invoices]
+    _send_payment_summary(results)
+    frappe.db.commit()
+
+
+def _acquire_scheduling_lock() -> bool:
+    """Prevent concurrent/duplicate execution (lock for 30 minutes)."""
     lock_key = f"i8:payment_scheduling:lock:{date.today().isoformat()}"
     if frappe.cache.get_value(lock_key):
         frappe.log_error(
             "schedule_weekly_payments skipped: already running or recently completed",
             "I8 Payment Scheduling Lock",
         )
-        return
+        return False
     frappe.cache.set_value(lock_key, 1, expires_in_sec=1800)
+    return True
 
-    today = date.today()
-    # Calculate end of week (Sunday)
-    days_until_sunday = 6 - today.weekday()
-    week_end = today + timedelta(days=days_until_sunday)
 
-    # Find outstanding PIs due this week WITHOUT existing payment
-    invoices = frappe.db.sql("""
+def _invoices_due_this_week(today: date) -> list:
+    """Outstanding Purchase Invoices due until Sunday that nothing is paying yet."""
+    week_end = today + timedelta(days=6 - today.weekday())
+    return frappe.db.sql(f"""
         SELECT pi.name, pi.supplier, pi.supplier_name, pi.outstanding_amount, pi.due_date
         FROM `tabPurchase Invoice` pi
         WHERE pi.docstatus = 1
         AND pi.outstanding_amount > 0
         AND pi.due_date BETWEEN %s AND %s
-        AND NOT EXISTS (
-            SELECT 1 FROM `tabPayment Entry Reference` per
-            JOIN `tabPayment Entry` pe ON pe.name = per.parent
-            WHERE per.reference_name = pi.name
-            AND pe.docstatus < 2
-        )
-        AND NOT EXISTS (
-            SELECT 1 FROM `tabInter Payment Order` ipo
-            WHERE ipo.purchase_invoice = pi.name
-            AND ipo.docstatus < 2
-        )
+        {_NO_PAYMENT_UNDER_WAY_SQL}
         ORDER BY pi.due_date ASC
     """, (today.isoformat(), week_end.isoformat()), as_dict=True)
 
-    if not invoices:
-        return
 
-    scheduled = []
-    errors = []
-    credit_card_paid = []
+def _schedule_in_own_transaction(inv: dict) -> dict:
+    """One invoice, one transaction: commit what worked, roll back what did not.
 
-    for inv in invoices:
-        try:
-            result = _schedule_single_payment(inv)
-            if result["status"] == "scheduled":
-                scheduled.append(result)
-            elif result["status"] == "credit_card":
-                credit_card_paid.append(result)
-            elif result["status"] == "error":
-                errors.append(result)
-        except Exception as e:
-            errors.append({"invoice": inv["name"], "error": str(e)})
-
-    # Send summary to Telegram
-    _send_payment_summary(scheduled, credit_card_paid, errors)
-    frappe.db.commit()
+    Without the rollback, an order that was inserted but refused on submit would be committed
+    by the next invoice and stay behind as a draft that blocks its own invoice.
+    """
+    try:
+        result = _schedule_single_payment(inv)
+        frappe.db.commit()
+        return result
+    except JobTimeoutException:
+        raise  # the job ran out of time: stop here, never go on to the next invoice
+    except Exception as e:
+        frappe.db.rollback()
+        frappe.log_error(title=f"I8 Payment Scheduling Error: {inv['name']}", message=frappe.get_traceback())
+        return {"status": "error", "invoice": inv["name"], "error": str(e)}
 
 
 def _schedule_single_payment(inv: dict) -> dict:
     """Schedule payment for a single invoice based on its payment method.
 
-    Includes a per-invoice lock to prevent duplicate API calls in case of
-    concurrent or repeated execution.
+    ``check_invoice_payable`` is the same guard the order, the API and the execution use. The
+    database (unique ``invoice_lock``) is the backstop for two runs racing past it.
     """
     invoice_name = inv["name"]
-
-    # Per-invoice lock: prevents same invoice being processed twice
-    lock_key = f"i8:payment_lock:{invoice_name}"
-    if frappe.cache.get_value(lock_key):
-        return {"status": "skipped", "invoice": invoice_name, "reason": "Already being processed (lock active)"}
-    frappe.cache.set_value(lock_key, 1, expires_in_sec=600)  # 10 min lock
-
-    # Double-check: re-verify no Payment Entry or Inter Payment Order was created
-    # between the SQL query and now (race condition guard)
-    has_payment = frappe.db.sql("""
-        SELECT 1 FROM `tabPayment Entry Reference` per
-        JOIN `tabPayment Entry` pe ON pe.name = per.parent
-        WHERE per.reference_name = %s AND pe.docstatus < 2
-        LIMIT 1
-    """, invoice_name)
-
-    if has_payment:
-        frappe.cache.delete_value(lock_key)
-        return {"status": "skipped", "invoice": invoice_name, "reason": "Payment Entry already exists"}
-
-    has_ipo = frappe.db.exists(
-        "Inter Payment Order",
-        {"purchase_invoice": invoice_name, "docstatus": ["<", 2]},
-    )
-    if has_ipo:
-        frappe.cache.delete_value(lock_key)
-        return {"status": "skipped", "invoice": invoice_name, "reason": "Inter Payment Order already exists"}
+    reason = check_invoice_payable(invoice_name, float(inv["outstanding_amount"]))
+    if reason:
+        return {"status": "skipped", "invoice": invoice_name, "reason": reason}
 
     mode = _get_payment_mode(invoice_name)
-    supplier = inv["supplier"]
-
-    try:
-        if mode in ("Pix", "PIX"):
-            return _schedule_pix_payment(inv, supplier)
-        elif mode in ("Boleto",):
-            return _schedule_boleto_payment(inv)
-        elif mode in ("Credit Card",):
-            return _handle_credit_card_payment(inv)
-        elif mode in ("Wire Transfer", "TED"):
-            return _schedule_ted_payment(inv, supplier)
-        else:
-            return {"status": "skipped", "invoice": invoice_name, "reason": f"Unknown payment mode: {mode}"}
-    except Exception as e:
-        return {"status": "error", "invoice": invoice_name, "error": str(e)}
+    if mode in ("Pix", "PIX"):
+        return _schedule_pix_payment(inv, inv["supplier"])
+    if mode in ("Boleto",):
+        return _schedule_boleto_payment(inv)
+    if mode in ("Credit Card",):
+        return _handle_credit_card_payment(inv)
+    if mode in ("Wire Transfer", "TED"):
+        return _schedule_ted_payment(inv)
+    return {"status": "skipped", "invoice": invoice_name, "reason": f"Unknown payment mode: {mode}"}
 
 
 def _get_payment_mode(invoice_name: str) -> str:
@@ -439,120 +424,95 @@ def _get_payment_mode(invoice_name: str) -> str:
 
 
 def _schedule_pix_payment(inv: dict, supplier: str) -> dict:
-    """Schedule a PIX payment via Inter API."""
+    """Create the PIX order of an invoice (key from the supplier) and queue its execution."""
     pix_key = frappe.db.get_value("Supplier", supplier, "pix_key")
     if not pix_key:
         return {"status": "error", "invoice": inv["name"], "error": "Supplier has no PIX key"}
-
-    try:
-        from brazil_module.services.banking.inter_client import InterAPIClient
-
-        inter_account = frappe.get_all(
-            "Inter Company Account",
-            filters={"enabled": 1},
-            fields=["name"],
-            limit=1,
-        )
-        if not inter_account:
-            return {"status": "error", "invoice": inv["name"], "error": "No Inter account configured"}
-
-        client = InterAPIClient(inter_account[0]["name"])
-        payment_data = {
-            "valor": f"{float(inv['outstanding_amount']):.2f}",
-            "descricao": f"Payment {inv['name']}",
-            "destinatario": {
-                "tipo": "CHAVE",
-                "chave": pix_key,
-            },
-            "dataAgendamento": str(inv["due_date"]),
-        }
-
-        response = client.send_pix(payment_data)
-
-        # Create Payment Entry immediately after API success to prevent duplicates
-        pe_name = _create_payment_entry_draft(inv, "Pix", response)
-        frappe.db.commit()
-
-        return {
-            "status": "scheduled",
-            "invoice": inv["name"],
-            "supplier": inv.get("supplier_name", ""),
-            "amount": float(inv["outstanding_amount"]),
-            "due_date": str(inv["due_date"]),
-            "method": "PIX",
-            "payment_entry": pe_name,
-            "transaction_id": response.get("codigoSolicitacao", ""),
-        }
-    except Exception as e:
-        return {"status": "error", "invoice": inv["name"], "error": str(e)}
+    return _create_and_queue_order(inv, "PIX", "PIX", pix_key=pix_key)
 
 
 def _schedule_boleto_payment(inv: dict) -> dict:
-    """Schedule a boleto payment via Inter API."""
+    """Create the boleto order of an invoice (barcode and due date from it) and queue its execution."""
     barcode = frappe.db.get_value("Purchase Invoice", inv["name"], "boleto_barcode")
     if not barcode:
-        return {"status": "error", "invoice": inv["name"], "error": "Falta linha digitavel do boleto"}
+        return {"status": "error", "invoice": inv["name"], "error": "The Purchase Invoice has no boleto barcode"}
+    return _create_and_queue_order(
+        inv, "Boleto Payment", "Boleto", barcode=barcode, boleto_due_date=inv["due_date"],
+    )
 
+
+def _create_and_queue_order(inv: dict, payment_type: str, method: str, **details) -> dict:
+    """The order first, committed; only then - and only when it is ``Approved`` - its job."""
+    from brazil_module.services.banking.payment_service import create_payment_order_for_invoice
+
+    order_name = create_payment_order_for_invoice(
+        inv["name"], payment_type, scheduled_date=inv["due_date"], **details,
+    )
+    # frappe.enqueue is immediate: a worker that claimed the order before this transaction is
+    # committed would not find an Approved row, skip it, and nothing would ever send it.
+    frappe.db.commit()
+
+    result = {
+        "invoice": inv["name"],
+        "supplier": inv.get("supplier_name", ""),
+        "amount": float(inv["outstanding_amount"]),
+        "due_date": str(inv["due_date"]),
+        "method": method,
+        "payment_order": order_name,
+    }
     try:
-        from brazil_module.services.banking.inter_client import InterAPIClient
-
-        inter_account = frappe.get_all(
-            "Inter Company Account", filters={"enabled": 1}, fields=["name"], limit=1,
-        )
-        if not inter_account:
-            return {"status": "error", "invoice": inv["name"], "error": "No Inter account configured"}
-
-        client = InterAPIClient(inter_account[0]["name"])
-        payment_data = {
-            "codBarraLinhaDigitavel": barcode,
-            "valorPagar": float(inv["outstanding_amount"]),
-            "dataPagamento": str(inv["due_date"]),
-        }
-
-        response = client.pay_barcode(payment_data)
-
-        # Create Payment Entry immediately after API success to prevent duplicates
-        pe_name = _create_payment_entry_draft(inv, "Boleto", response)
-        frappe.db.commit()
-
-        return {
-            "status": "scheduled",
-            "invoice": inv["name"],
-            "supplier": inv.get("supplier_name", ""),
-            "amount": float(inv["outstanding_amount"]),
-            "due_date": str(inv["due_date"]),
-            "method": "Boleto",
-            "payment_entry": pe_name,
-        }
+        return _queue_when_approved(result)
+    except JobTimeoutException:
+        raise
     except Exception as e:
-        return {"status": "error", "invoice": inv["name"], "error": str(e)}
+        # The order exists and protects its invoice either way: tell the operator which one it is.
+        frappe.log_error(title=f"I8 Payment Scheduling Error: {order_name}", message=frappe.get_traceback())
+        return {
+            "status": "error",
+            "invoice": inv["name"],
+            "error": f"Order {order_name} was created but could not be queued ({e}). Execute it from the ERP.",
+        }
 
 
-def _schedule_ted_payment(inv: dict, supplier: str) -> dict:
-    """Schedule a TED payment -- needs bank details, currently just flags for review."""
-    return {"status": "error", "invoice": inv["name"], "error": "TED requires bank details (not yet automated)"}
+def _queue_when_approved(result: dict) -> dict:
+    """Hand an ``Approved`` order to its own job; anything else waits for a human in the ERP."""
+    from brazil_module.services.banking.payment_service import enqueue_payment_execution
+
+    order_name = result["payment_order"]
+    order_status = frappe.db.get_value(PAYMENT_ORDER_DOCTYPE, order_name, "status")
+    if order_status != "Approved":
+        return {**result, "status": "pending_approval", "order_status": order_status}
+    # False means a job for this order is already queued or running: it is queued either way.
+    enqueue_payment_execution(order_name)
+    return {**result, "status": "queued"}
+
+
+def _schedule_ted_payment(inv: dict) -> dict:
+    """TED cannot be automated: Banco Inter's Banking API has no TED endpoint."""
+    return {
+        "status": "error",
+        "invoice": inv["name"],
+        "error": "TED is not available (Banco Inter's Banking API has no TED endpoint). Pay by PIX or boleto.",
+    }
 
 
 def _handle_credit_card_payment(inv: dict) -> dict:
     """Handle credit card payment -- create and submit Payment Entry immediately."""
-    try:
-        pe_name = _create_payment_entry_draft(inv, "Credit Card", {})
-        pe = frappe.get_doc("Payment Entry", pe_name)
-        pe.submit()
+    pe_name = _create_payment_entry_draft(inv, "Credit Card")
+    pe = frappe.get_doc("Payment Entry", pe_name)
+    pe.submit()
 
-        return {
-            "status": "credit_card",
-            "invoice": inv["name"],
-            "supplier": inv.get("supplier_name", ""),
-            "amount": float(inv["outstanding_amount"]),
-            "payment_entry": pe_name,
-        }
-    except Exception as e:
-        return {"status": "error", "invoice": inv["name"], "error": str(e)}
+    return {
+        "status": "credit_card",
+        "invoice": inv["name"],
+        "supplier": inv.get("supplier_name", ""),
+        "amount": float(inv["outstanding_amount"]),
+        "payment_entry": pe_name,
+    }
 
 
-def _create_payment_entry_draft(inv: dict, mode: str, api_response: dict) -> str:
-    """Create a Payment Entry draft for a scheduled payment."""
+def _create_payment_entry_draft(inv: dict, mode: str) -> str:
+    """Create a Payment Entry draft (credit-card branch only: PIX and boleto go through an order)."""
     invoice = frappe.get_doc("Purchase Invoice", inv["name"])
 
     pe = frappe.new_doc("Payment Entry")
@@ -562,26 +522,14 @@ def _create_payment_entry_draft(inv: dict, mode: str, api_response: dict) -> str
     pe.party = invoice.supplier
     pe.paid_amount = float(inv["outstanding_amount"])
     pe.received_amount = pe.paid_amount
-    pe.reference_no = api_response.get("codigoSolicitacao", inv["name"])
+    pe.reference_no = inv["name"]
     pe.reference_date = inv.get("due_date") or frappe.utils.today()
     pe.mode_of_payment = mode
     pe.paid_to = invoice.credit_to
 
-    # Get bank account
-    try:
-        inter_account = frappe.get_all(
-            "Inter Company Account", filters={"enabled": 1}, fields=["name"], limit=1,
-        )
-        if inter_account:
-            bank_account = frappe.db.get_value(
-                "Inter Company Account", inter_account[0]["name"], "bank_account",
-            )
-            if bank_account:
-                gl_account = frappe.db.get_value("Bank Account", bank_account, "account")
-                if gl_account:
-                    pe.paid_from = gl_account
-    except Exception:
-        pass
+    gl_account = _inter_gl_account(invoice.company)
+    if gl_account:
+        pe.paid_from = gl_account
 
     pe.append("references", {
         "reference_doctype": "Purchase Invoice",
@@ -593,35 +541,72 @@ def _create_payment_entry_draft(inv: dict, mode: str, api_response: dict) -> str
     return pe.name
 
 
-def _send_payment_summary(scheduled: list, credit_card: list, errors: list) -> None:
-    """Send payment scheduling summary via Telegram."""
+def _inter_gl_account(company: str) -> str | None:
+    """GL account behind the company's Inter account, when there is one."""
+    return bank_gl_account(get_inter_account_for_company(company))
+
+
+def _send_payment_summary(results: list) -> None:
+    """Send the weekly scheduling summary via Telegram: what was queued, what waits, what was left out."""
     lines = ["*Agendamento de pagamentos (semanal):*\n"]
+    lines += _order_lines(
+        results, "queued", "Na fila de execucao",
+        "Cada ordem roda em seu proprio job e avisa o resultado. Aprove no banco quando ele pedir.",
+    )
+    lines += _order_lines(
+        results, "pending_approval", "Aguardando aprovacao no ERP",
+        "Nada foi enviado ao banco: aprove e execute cada ordem no ERP.",
+    )
+    lines += _credit_card_lines(results)
+    lines += _reason_lines(results, "skipped", "Ignorados", "reason")
+    lines += _reason_lines(results, "error", "Erros", "error")
 
-    if scheduled:
-        total = sum(s["amount"] for s in scheduled)
-        lines.append(f"*Agendados: {len(scheduled)} pagamentos — R$ {total:,.2f}*")
-        for s in scheduled:
-            supplier = (s.get("supplier") or "")[:30]
-            lines.append(f"  - {s['invoice']}: {supplier} R$ {s['amount']:,.2f} ({s['method']}, venc. {s['due_date']})")
-        lines.append("  Acesse o banco para as devidas aprovacoes.\n")
-
-    if credit_card:
-        total = sum(c["amount"] for c in credit_card)
-        lines.append(f"*Cartao de credito: {len(credit_card)} — R$ {total:,.2f} (baixa automatica)*")
-        for c in credit_card:
-            supplier = (c.get("supplier") or "")[:30]
-            lines.append(f"  - {c['invoice']}: {supplier} R$ {c['amount']:,.2f}")
-        lines.append("")
-
-    if errors:
-        lines.append(f"*Erros: {len(errors)}*")
-        for e in errors:
-            lines.append(f"  - {e['invoice']}: {e.get('error', 'Unknown error')[:60]}")
-
-    if not scheduled and not credit_card and not errors:
+    if len(lines) == 1:
         lines.append("Nenhum pagamento para esta semana.")
 
     _notify_telegram("\n".join(lines))
+
+
+def _order_lines(results: list, status: str, title: str, hint: str) -> list:
+    orders = [r for r in results if r.get("status") == status]
+    if not orders:
+        return []
+    total = sum(o["amount"] for o in orders)
+    lines = [f"*{title}: {len(orders)} — R$ {total:,.2f}*"]
+    for o in orders:
+        supplier = (o.get("supplier") or "")[:30]
+        state = f" [{o['order_status']}]" if o.get("order_status") else ""
+        lines.append(
+            f"  - {o['invoice']}: {supplier} R$ {o['amount']:,.2f} "
+            f"({o['method']}, venc. {o['due_date']}) -> {o['payment_order']}{state}"
+        )
+    lines.append(f"  {hint}\n")
+    return lines
+
+
+def _credit_card_lines(results: list) -> list:
+    credit_card = [r for r in results if r.get("status") == "credit_card"]
+    if not credit_card:
+        return []
+    total = sum(c["amount"] for c in credit_card)
+    lines = [f"*Cartao de credito: {len(credit_card)} — R$ {total:,.2f} (baixa automatica)*"]
+    for c in credit_card:
+        supplier = (c.get("supplier") or "")[:30]
+        lines.append(f"  - {c['invoice']}: {supplier} R$ {c['amount']:,.2f}")
+    lines.append("")
+    return lines
+
+
+def _reason_lines(results: list, status: str, title: str, key: str) -> list:
+    entries = [r for r in results if r.get("status") == status]
+    if not entries:
+        return []
+    lines = [f"*{title}: {len(entries)}*"]
+    for entry in entries:
+        text = str(entry.get(key) or "Unknown")[:SUMMARY_TEXT_LIMIT]
+        lines.append(f"  - {entry['invoice']}: {text}")
+    lines.append("")
+    return lines
 
 
 def _notify_telegram(message: str) -> None:

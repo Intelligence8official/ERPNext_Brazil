@@ -40,3 +40,6 @@ node_modules/
 
 # Logs
 *.log
+
+# Scratch output from the Playwright MCP plugin (console logs, page snapshots)
+.playwright-mcp/

@@ -13,15 +13,25 @@ from frappe.utils import flt
 
 
 def on_payment_entry_submit(doc, method=None):
-    """Hook: when a Payment Entry is submitted, check if it's linked to Inter documents."""
-    if doc.get("inter_payment_order"):
-        # Update the Payment Order status
-        frappe.db.set_value(
-            "Inter Payment Order",
-            doc.inter_payment_order,
-            "status",
-            "Completed",
-        )
+    """Hook: link a submitted Payment Entry to its Inter Payment Order.
+
+    It never writes the order's ``status``: only ``payment_service`` moves an order, and only
+    on the bank's word. The entry is linked when the order has none yet, and a ``Completed``
+    order stops blocking its invoice from then on (the payment is in ``outstanding_amount``).
+    Runs inside the entry's transaction: no commit here.
+    """
+    order_name = doc.get("inter_payment_order")
+    if not order_name:
+        return
+    order = frappe.db.get_value(
+        "Inter Payment Order", order_name, ["status", "payment_entry"], as_dict=True, for_update=True
+    )
+    if not order or order.get("payment_entry"):
+        return
+    values = {"payment_entry": doc.name}
+    if order.get("status") == "Completed":
+        values["invoice_lock"] = None
+    frappe.db.set_value("Inter Payment Order", order_name, values)
 
 
 def batch_reconcile(bank_account: str, date_from: date | None = None) -> dict:

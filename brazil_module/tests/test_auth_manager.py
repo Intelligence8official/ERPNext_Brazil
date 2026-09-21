@@ -3,7 +3,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # Mock frappe and its submodules before importing the module under test
 if "frappe" not in sys.modules or not isinstance(sys.modules["frappe"], MagicMock):
@@ -33,7 +33,14 @@ _requests_mock.exceptions.SSLError = _SSLError
 _requests_mock.exceptions.ConnectionError = _ConnectionError
 _requests_mock.exceptions.Timeout = _Timeout
 
+# test_webhook_handler.py parks MagicMock placeholders for these modules when it is imported
+# first; this file must exercise the real ones.
+for _name in ("brazil_module.services.banking.auth_manager", "brazil_module.services.banking.inter_client"):
+    if isinstance(sys.modules.get(_name), MagicMock):
+        del sys.modules[_name]
+
 from brazil_module.services.banking.auth_manager import (
+    DEFAULT_SCOPES,
     InterAuthManager,
     InterAuthError,
     TOKEN_URL_PRODUCTION,
@@ -85,6 +92,12 @@ class TestGetTokenUrl(unittest.TestCase):
 
 class TestGetValidToken(unittest.TestCase):
     """Tests for InterAuthManager.get_valid_token()."""
+
+    def setUp(self):
+        # A side_effect left by another test module (test_dfe_client.py installs
+        # get_datetime with one) would win over the return_value set below.
+        _am_mod.frappe.utils.get_datetime.side_effect = None
+        _am_mod.frappe.utils.now_datetime.side_effect = None
 
     def tearDown(self):
         frappe.get_doc.side_effect = None
@@ -173,6 +186,74 @@ class TestGetValidToken(unittest.TestCase):
         self.assertEqual(result, "fresh-token")
         mock_request.assert_called_once()
         mock_cache.assert_called_once_with("fresh-token", 7200)
+
+
+class TestForceRefresh(unittest.TestCase):
+    """get_valid_token(force_refresh=True): what the client calls after an HTTP 401."""
+
+    def setUp(self):
+        self.mgr = _make_manager()
+        self.mgr._account_doc.access_token = "cached-token-abc"
+        self.mgr._account_doc.token_expiry = "2099-12-31 23:59:59"
+        # the mock the module under test holds, whoever installed it first
+        am_frappe = _am_mod.frappe
+        am_frappe.utils.get_datetime.side_effect = None
+        am_frappe.utils.now_datetime.side_effect = None
+        am_frappe.utils.get_datetime.return_value = datetime(2099, 12, 31, 23, 59, 59)
+        am_frappe.utils.now_datetime.return_value = datetime(2025, 1, 1, 12, 0, 0)
+
+    @patch.object(InterAuthManager, "_request_new_token")
+    @patch.object(InterAuthManager, "_cache_token")
+    def test_valid_cached_token_is_discarded(self, mock_cache, mock_request):
+        mock_request.return_value = {"access_token": "brand-new", "expires_in": 3600}
+
+        result = self.mgr.get_valid_token(force_refresh=True)
+
+        self.assertEqual(result, "brand-new")
+        mock_request.assert_called_once_with(DEFAULT_SCOPES)
+        mock_cache.assert_called_once_with("brand-new", 3600)
+
+    @patch.object(InterAuthManager, "_request_new_token")
+    @patch.object(InterAuthManager, "_cache_token")
+    def test_default_still_uses_the_cache(self, mock_cache, mock_request):
+        self.assertEqual(self.mgr.get_valid_token(), "cached-token-abc")
+        self.assertEqual(self.mgr.get_valid_token(force_refresh=False), "cached-token-abc")
+
+        mock_request.assert_not_called()
+        mock_cache.assert_not_called()
+
+    @patch.object(InterAuthManager, "_request_new_token")
+    @patch.object(InterAuthManager, "_cache_token")
+    def test_custom_scopes_are_kept(self, mock_cache, mock_request):
+        mock_request.return_value = {"access_token": "scoped", "expires_in": 60}
+
+        self.mgr.get_valid_token(["extrato.read"], force_refresh=True)
+
+        mock_request.assert_called_once_with(["extrato.read"])
+
+    @patch.object(InterAuthManager, "get_cert_paths", return_value=("/tmp/cert.pem", "/tmp/key.pem"))
+    def test_scope_sent_to_the_bank_is_the_real_scope_list(self, mock_cert_paths):
+        """Regression: the old 401 branch sent a module name as the OAuth scope."""
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {"access_token": "brand-new", "expires_in": 3600}
+        _am_mod.requests.post = MagicMock(return_value=response)
+
+        with patch.object(InterAuthManager, "_cache_token"):
+            self.mgr.get_valid_token(force_refresh=True)
+
+        sent = _am_mod.requests.post.call_args.kwargs["data"]
+        self.assertEqual(sent["scope"], " ".join(DEFAULT_SCOPES))
+
+    @patch.object(InterAuthManager, "_request_new_token")
+    @patch.object(InterAuthManager, "_cache_token")
+    def test_failed_refresh_raises_and_caches_nothing(self, mock_cache, mock_request):
+        mock_request.side_effect = InterAuthError("Authentication failed (HTTP 400)")
+
+        with self.assertRaises(InterAuthError):
+            self.mgr.get_valid_token(force_refresh=True)
+
+        mock_cache.assert_not_called()
 
 
 class TestRequestNewToken(unittest.TestCase):

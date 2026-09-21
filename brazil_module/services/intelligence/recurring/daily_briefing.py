@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, timedelta, time as dt_time
 
 import frappe
@@ -9,6 +10,16 @@ import frappe
 # off for the whole day.
 _BRIEFING_SENT_KEY = "i8_last_briefing_date"
 
+# Inter Payment Orders that still need a human (see _payment_orders_section).
+PAYMENT_ORDERS_TITLE = "*Pagamentos Inter — precisam de atencao:*"
+PAYMENT_ORDERS_PER_GROUP = 8
+_PAYMENT_ORDER_FIELDS = [
+    "name", "status", "amount", "bank_status", "bank_request_at", "modified", "purchase_invoice",
+]
+_IDLE_ORDER_STATUSES = ["Draft", "Pending Approval", "Approved"]
+_ONE_DAY = timedelta(hours=24)
+_PAYMENT_ORDER_LINE = re.compile(r"^\s+- (.+?): R\$ ", re.MULTILINE)  # a line of _payment_group_lines
+
 
 JARVIS_PERSONALITY = """You are I8Operator, the AI financial assistant for Intelligence8.
 Your personality: professional yet warm, subtly witty like the original JARVIS from Iron Man.
@@ -19,6 +30,8 @@ Rules:
 - Start with a warm greeting using the user's name and mention the day/date in Portuguese
 - Use a natural flow — don't just list items mechanically
 - Highlight what needs attention (overdue payments, pending approvals) with appropriate urgency
+- The "Pagamentos Inter" section is about real money that may be in flight: reproduce
+  every order of it (name, amount, status, age) exactly — never summarise, merge or drop one
 - For support tickets ("Chamados da Plataforma"), lead with the ones that have been
   waiting on us the longest, and flag any whose subject suggests the customer is
   blocked (login, payment, error, outage). Keep suggestions (Feature Requests) to one line
@@ -67,6 +80,8 @@ def scheduled_briefing():
         frappe.cache.set_value(
             _BRIEFING_SENT_KEY, today.strftime("%Y-%m-%d"), expires_in_sec=86400
         )
+        if formatted:
+            _send_payment_orders_left_out(formatted)
 
 
 def _is_briefing_time() -> bool:
@@ -116,9 +131,11 @@ def build_briefing() -> str:
 
     section_funcs = [
         lambda: f"*Daily Briefing — {today.strftime('%d/%m/%Y')} ({'Segunda' if is_monday else _weekday_name(today)})*\n",
+        _banking_health_section,
         _bank_balance_section,
         _reconciliation_status_section,
         lambda: _payables_section(today, is_monday),
+        _payment_orders_section,
         _pending_actions_section,
         lambda: support_tickets_section(is_monday),
     ]
@@ -145,6 +162,60 @@ def _weekday_name(d: date) -> str:
     return names[d.weekday()]
 
 
+BANKING_HEALTH_TITLE = "*Comunicacao bancaria:*"
+
+
+def _banking_health_section() -> str:
+    """What the daily watchman last found, repeated every day - unlike a single alert.
+
+    Empty while the channel is healthy. First, because the answer to "is any of this current?"
+    decides how to read the balance below it. A failure is reported IN the section rather than
+    raised: build_briefing() drops a section that raises, and this one vanishing would read as
+    "nothing to worry about" - which is exactly what five silent months already looked like.
+    """
+    try:
+        verdict = banking_health_status()
+        if not verdict.get("state") or verdict["state"] == "ok":
+            return ""
+        lines = [BANKING_HEALTH_TITLE]
+        lines += [f"  {part.strip()}" for part in str(verdict.get("summary") or "").split("|") if part.strip()]
+        checked = verdict.get("checked_on")
+        if checked:
+            lines.append(f"  (verificado em {frappe.utils.format_datetime(checked, 'dd/MM HH:mm')})")
+        return "\n".join(lines)
+    except Exception as e:
+        try:
+            frappe.log_error(title="I8 Briefing Banking Health Error", message=str(e))
+        except Exception:
+            pass
+        return f"{BANKING_HEALTH_TITLE}\n  Nao foi possivel ler a saude da conexao (ver Error Log)"
+
+
+def banking_health_status() -> dict:
+    """Indirection on purpose: the section is tested against a reader that can be made to fail."""
+    from brazil_module.services.banking.banking_health import status
+
+    return status()
+
+
+def _balance_age(balance_date) -> str:
+    """A balance is only news while it is recent; an old one has to say how old it is.
+
+    The age is an annotation, the balance is the information: if the date cannot be read, print it
+    as it is rather than let the whole line disappear into the caller's except.
+    """
+    if not balance_date:
+        return "sem data"
+    try:
+        as_date = frappe.utils.getdate(balance_date)
+        days = (now_datetime().date() - as_date).days
+        if days <= 0:
+            return str(as_date)
+        return f"{as_date}, ha {days} dias"
+    except Exception:
+        return str(balance_date)
+
+
 def _bank_balance_section() -> str:
     """Bank account balances from Inter API and GL Entry."""
     lines = ["*Saldo Bancario:*"]
@@ -158,8 +229,7 @@ def _bank_balance_section() -> str:
         for acc in inter_accounts:
             balance = float(acc.get("current_balance") or 0)
             if balance > 0:
-                balance_date = acc.get("balance_date") or ""
-                lines.append(f"  Inter ({acc['company']}): R$ {balance:,.2f} ({balance_date})")
+                lines.append(f"  Inter ({acc['company']}): R$ {balance:,.2f} ({_balance_age(acc.get('balance_date'))})")
     except Exception:
         pass
 
@@ -249,6 +319,140 @@ def _payables_section(today: date, is_monday: bool) -> str:
             lines.append("  Nenhum pagamento para hoje")
 
     return "\n".join(lines)
+
+
+def _payment_orders_section(now: datetime | None = None) -> str:
+    """Inter Payment Orders that still need a human - repeated every day, unlike a single alert.
+
+    Empty when there is nothing to report. A failure is reported IN the section instead of
+    raised: build_briefing() drops a section that raises, and a payment section that quietly
+    disappears reads as "nothing to worry about".
+    """
+    try:
+        moment = now or frappe.utils.now_datetime()
+        lines = []
+        for title, orders, describe in _payment_order_groups(moment):
+            lines += _payment_group_lines(title, orders, describe, moment)
+        return "\n".join([PAYMENT_ORDERS_TITLE, *lines]) if lines else ""
+    except Exception as e:
+        try:
+            frappe.log_error(title="I8 Briefing Payment Orders Error", message=str(e))
+        except Exception:
+            # Writing the Error Log is a database write too: the section still has to come back.
+            pass
+        return f"{PAYMENT_ORDERS_TITLE}\n  Nao foi possivel ler as ordens de pagamento (ver Error Log)"
+
+
+def _send_payment_orders_left_out(formatted: str) -> None:
+    """Send the payment section verbatim when the formatted briefing lost one of its orders.
+
+    The briefing is rewritten by an LLM and the prompt is a request, not a guarantee. This is
+    the part that does not depend on it: every order named in the section must be named in
+    what was sent, or the section goes out again, untouched. Best effort - never raises.
+    """
+    try:
+        section = _payment_orders_section()
+        if section and not _carries_every_order(section, formatted):
+            _send_via_telegram(section)
+    except Exception as e:
+        try:
+            frappe.log_error(title="I8 Briefing Payment Orders Error", message=str(e))
+        except Exception:
+            pass
+
+
+def _carries_every_order(section: str, formatted: str) -> bool:
+    """True when every order line of the section has its name, whole, in the formatted text."""
+    names = _PAYMENT_ORDER_LINE.findall(section)
+    if not names:  # "could not read the orders": nothing to match, so it is never assumed kept
+        return False
+    return all(re.search(rf"(?<![\w-]){re.escape(name)}(?![\w-])", formatted) for name in names)
+
+
+def _payment_order_groups(now: datetime) -> list:
+    """``(title, orders, describe)`` per group, most urgent first. Five queries, none per order."""
+    from brazil_module.services.banking.payment_guards import DOCTYPE
+
+    cutoff = now - _ONE_DAY
+
+    def read(filters: dict) -> list:
+        return frappe.get_all(DOCTYPE, filters=filters, fields=_PAYMENT_ORDER_FIELDS, order_by="modified asc")
+
+    # Every poll bumps `modified`: how long the bank has had an order is `bank_request_at`.
+    waiting = [
+        order for order in read({"docstatus": 1, "status": "Awaiting Bank"})
+        if _order_since(order) is None or _order_since(order) <= cutoff
+    ]
+    return [
+        ("Verificacao necessaria (o banco pode ter o pagamento)",
+         read({"docstatus": 1, "status": "Needs Verification"}), _describe_with_invoice),
+        ("Aguardando o banco ha mais de 24h", waiting, _describe_with_bank_status),
+        ("Falharam nas ultimas 24h",
+         read({"docstatus": 1, "status": "Failed", "modified": [">=", cutoff]}), _describe_failed),
+        ("Pagos sem Payment Entry (use Create Payment Entry na ordem)",
+         read({"docstatus": 1, "status": "Completed", "payment_entry": ["is", "not set"]}), _describe_failed),
+        ("Parados ha mais de 24h (bloqueiam a fatura)",
+         read({"docstatus": ["<", 2], "status": ["in", _IDLE_ORDER_STATUSES], "modified": ["<", cutoff]}),
+         _describe_with_status),
+    ]
+
+
+def _payment_group_lines(title: str, orders: list, describe, now: datetime) -> list:
+    """One group: its count, the oldest orders first, and how many were left out."""
+    if not orders:
+        return []
+    oldest_first = sorted(orders, key=lambda order: _order_since(order) or datetime.min)
+    lines = [f"  *{title}: {len(orders)}*"]
+    for order in oldest_first[:PAYMENT_ORDERS_PER_GROUP]:
+        amount = float(order.get("amount") or 0)
+        lines.append(f"    - {order.get('name')}: R$ {amount:,.2f}{describe(order, now)}")
+    if len(orders) > PAYMENT_ORDERS_PER_GROUP:
+        lines.append(f"    ... e mais {len(orders) - PAYMENT_ORDERS_PER_GROUP}")
+    return lines
+
+
+def _describe_with_invoice(order: dict, now: datetime) -> str:
+    invoice = order.get("purchase_invoice")
+    return f" — {_order_age(order, now)}{f' ({invoice})' if invoice else ''}"
+
+
+def _describe_with_bank_status(order: dict, now: datetime) -> str:
+    return f" — {order.get('bank_status') or 'sem status do banco'}, {_order_age(order, now)}"
+
+
+def _describe_failed(order: dict, now: datetime) -> str:
+    invoice = order.get("purchase_invoice")
+    return f" ({invoice})" if invoice else ""
+
+
+def _describe_with_status(order: dict, now: datetime) -> str:
+    return f" — {order.get('status')}, {_order_age(order, now)}"
+
+
+def _order_since(order: dict) -> datetime | None:
+    """When the bank received the order; before that (or without it), when it last changed."""
+    return _as_datetime(order.get("bank_request_at")) or _as_datetime(order.get("modified"))
+
+
+def _order_age(order: dict, now: datetime) -> str:
+    since = _order_since(order)
+    if since is None:
+        return "data desconhecida"
+    days = (now - since).days
+    if days <= 0:
+        return "hoje"
+    return "ha 1 dia" if days == 1 else f"ha {days} dias"
+
+
+def _as_datetime(value) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime.combine(value, dt_time())
+    try:
+        return datetime.fromisoformat(str(value)) if value else None
+    except ValueError:
+        return None
 
 
 def _pending_actions_section() -> str:
@@ -465,6 +669,15 @@ def _reconciliation_status_section() -> str:
         pct = (reconciled / total * 100) if total > 0 else 0
 
         lines = ["*Conciliacao Bancaria:*"]
+        stale = _statement_age()
+        if stale:
+            # Counting old transactions that are all reconciled is how a dead channel reports
+            # "em dia": say the extract stopped instead.
+            lines.append(f"  Sem extrato novo ha {stale} dias - os numeros abaixo sao antigos")
+            lines.append(f"  {reconciled}/{total} transacoes conciliadas ({pct:.0f}%)")
+            if unreconciled:
+                lines.append(f"  {unreconciled} transacoes pendentes")
+            return "\n".join(lines)
         if unreconciled == 0:
             lines.append("  Em dia (100% conciliado)")
         else:
@@ -473,6 +686,22 @@ def _reconciliation_status_section() -> str:
         return "\n".join(lines)
     except Exception:
         return ""
+
+
+def _statement_age() -> int:
+    """Days since the newest statement sync, or 0 while it is recent enough to trust."""
+    from brazil_module.services.banking.banking_health import SYNC_STALE_DAYS
+
+    synced = [
+        row.get("last_statement_sync")
+        for row in frappe.get_all("Inter Company Account", filters={"sync_enabled": 1},
+                                  fields=["last_statement_sync"])
+    ]
+    newest = max((frappe.utils.get_datetime(when) for when in synced if when), default=None)
+    if newest is None:
+        return 0  # never synced, or no account: _banking_health_section already says it
+    days = (now_datetime() - newest).days
+    return days if days >= SYNC_STALE_DAYS else 0
 
 
 def _get_user_first_name() -> str:

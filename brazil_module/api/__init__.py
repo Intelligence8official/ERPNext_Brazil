@@ -537,56 +537,99 @@ def create_payment_order(
     barcode: str = "",
     **kwargs,
 ) -> dict:
-    """Create an outbound payment order."""
+    """Create a draft outbound payment order.
+
+    With a ``purchase_invoice`` the company, the party and the amount come from the invoice,
+    whatever the client sent, and the payment guards decide whether it may be paid at all;
+    their reason comes back as the error message.
+    """
     try:
-        account_name = frappe.db.get_value(
-            "Inter Company Account",
-            {"company": company, "sync_enabled": 1},
-            "name",
+        if purchase_invoice:
+            return _create_payment_order_for_invoice(purchase_invoice, payment_type, pix_key, barcode, kwargs)
+        return _create_standalone_payment_order(
+            payment_type, amount, company, party_type, party, pix_key, barcode, kwargs
         )
-        if not account_name:
-            return {"status": "error", "message": _("No Inter Company Account for this company")}
-
-        order = frappe.new_doc("Inter Payment Order")
-        order.payment_type = payment_type
-        order.company = company
-        order.inter_company_account = account_name
-        order.amount = float(amount)
-        order.purchase_invoice = purchase_invoice or None
-        order.party_type = party_type or None
-        order.party = party or None
-
-        if payment_type == "PIX":
-            order.pix_key = pix_key
-        elif payment_type == "Boleto Payment":
-            order.barcode = barcode
-
-        # Set recipient info from party
-        if party_type and party:
-            if party_type == "Supplier":
-                supplier = frappe.get_doc("Supplier", party)
-                order.recipient_name = supplier.supplier_name
-                order.recipient_cpf_cnpj = supplier.tax_id or ""
-
-        order.insert()
-        return {"status": "success", "payment_order": order.name}
-
     except Exception as e:
-        frappe.log_error(str(e), "Payment Order Creation Error")
-        return {"status": "error", "message": str(e)}
+        return _payment_order_not_created(e)
+
+
+def _create_payment_order_for_invoice(
+    purchase_invoice: str, payment_type: str, pix_key: str, barcode: str, options: dict
+) -> dict:
+    from brazil_module.services.banking.payment_service import create_payment_order_for_invoice
+
+    name = create_payment_order_for_invoice(
+        purchase_invoice,
+        payment_type,
+        pix_key=pix_key,
+        barcode=barcode,
+        scheduled_date=options.get("scheduled_date") or None,
+        boleto_due_date=options.get("boleto_due_date") or None,
+        submit=False,
+    )
+    return {"status": "success", "payment_order": name}
+
+
+def _create_standalone_payment_order(
+    payment_type: str, amount: float, company: str, party_type: str, party: str, pix_key: str,
+    barcode: str, options: dict,
+) -> dict:
+    from brazil_module.services.banking.payment_guards import get_inter_account_for_company
+
+    account_name = get_inter_account_for_company(company)
+    if not account_name:
+        return {"status": "error", "message": _("No Inter Company Account for this company")}
+
+    order = frappe.new_doc("Inter Payment Order")
+    order.payment_type = payment_type
+    order.company = company
+    order.inter_company_account = account_name
+    order.amount = float(amount)
+    order.purchase_invoice = None
+    order.party_type = party_type or None
+    order.party = party or None
+
+    order.scheduled_date = options.get("scheduled_date") or None
+    if payment_type == "PIX":
+        order.pix_key = pix_key
+    elif payment_type == "Boleto Payment":
+        order.barcode = barcode
+        # The API requires dataVencimento, so the controller does too: without passing it through,
+        # every boleto order created without an invoice would be refused.
+        order.boleto_due_date = options.get("boleto_due_date") or None
+
+    # Set recipient info from party
+    if party_type == "Supplier" and party:
+        supplier = frappe.get_doc("Supplier", party)
+        order.recipient_name = supplier.supplier_name
+        order.recipient_cpf_cnpj = supplier.tax_id or ""
+
+    order.insert()
+    return {"status": "success", "payment_order": order.name}
+
+
+def _payment_order_not_created(error: Exception) -> dict:
+    """``error`` must mean that nothing was created: roll back first, then log.
+
+    The request commits when the endpoint returns. Without the rollback a row written before the
+    failure would stay - holding the ``invoice_lock`` of its invoice - while the user is told that
+    no order exists. ``frappe.throw`` also queued its text for the client; the returned message is
+    the one channel, so the dialog does not show the reason twice.
+    """
+    frappe.db.rollback()
+    frappe.clear_messages()
+    frappe.log_error(title="Payment Order Creation Error", message=frappe.get_traceback())
+    return {"status": "error", "message": str(error)}
 
 
 @frappe.whitelist()
 def execute_payment(payment_order_name: str) -> dict:
-    """Execute an approved payment order."""
-    from brazil_module.services.banking.payment_service import execute_payment_order
+    """Queue the execution of an approved payment order.
 
-    frappe.enqueue(
-        execute_payment_order,
-        payment_order_name=payment_order_name,
-        queue="short",
-    )
-    return {"status": "queued", "message": _("Payment execution initiated")}
+    Permission, the stored status and the kill switch are checked by the document; the job is
+    queued (deduplicated) by ``payment_service.enqueue_payment_execution``. Nothing is sent here.
+    """
+    return frappe.get_doc("Inter Payment Order", payment_order_name).execute_payment()
 
 
 # ── Webhooks ───────────────────────────────────────────────────────────
@@ -775,6 +818,14 @@ def i8_test_llm_connection():
 
 
 @frappe.whitelist()
+def check_banking_health() -> dict:
+    """Ask whether the channel to Banco Inter is working. Reads only - it never writes there."""
+    from brazil_module.services.banking.banking_health import check
+
+    return check()
+
+
+@frappe.whitelist()
 def i8_check_telegram_webhook():
     """Ask Telegram who the bot is and how delivery is going."""
     from brazil_module.services.intelligence.channels.telegram_health import check
@@ -829,10 +880,29 @@ def i8_run_followup_check():
 
 @frappe.whitelist()
 def i8_run_payment_scheduling():
-    """Manually trigger weekly payment scheduling."""
-    frappe.enqueue(
+    """Manually trigger weekly payment scheduling (it creates and queues orders; it never sends)."""
+    from brazil_module.services.banking.payment_guards import is_integration_enabled
+
+    frappe.only_for(("Banco Inter Manager", "System Manager"))
+    if not is_integration_enabled():
+        return _scheduling_not_queued(
+            "blocked", _("The Banco Inter integration is disabled in Banco Inter Settings. Nothing was scheduled.")
+        )
+    job = frappe.enqueue(
         "brazil_module.services.intelligence.recurring.planning_loop.schedule_weekly_payments",
         queue="long",
-        timeout=300,
+        timeout=1500,
+        job_id="inter_weekly_payments",
+        deduplicate=True,
     )
+    if job is None:
+        return _scheduling_not_queued(
+            "already_queued", _("The weekly payment scheduling is already queued or running. Nothing was queued again.")
+        )
     return {"status": "queued"}
+
+
+def _scheduling_not_queued(status: str, message: str) -> dict:
+    # The settings form only reacts to "queued"; the server message is what the user sees.
+    frappe.msgprint(message, indicator="orange", alert=True)
+    return {"status": status, "message": message}
