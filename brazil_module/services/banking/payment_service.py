@@ -863,7 +863,7 @@ def _resolve_paid(order: dict, reference: str, paid_on, note: str) -> dict:
 
 def _resolve_not_paid(order: dict, reference: str, paid_on, note: str) -> dict:
     name = order["name"]
-    if order.get("approval_code"):
+    if _bank_still_decides(order):
         known_id = order["approval_code"]
         frappe.throw(_("The bank gave this payment the id {0}: resolve it as 'at the bank'").format(known_id))
     if not note:
@@ -875,6 +875,23 @@ def _resolve_not_paid(order: dict, reference: str, paid_on, note: str) -> dict:
     if not wrote:
         frappe.throw(_("The order changed while it was being resolved. Reload it."))
     return {"status": "failed"}
+
+
+def _bank_still_decides(order: dict) -> bool:
+    """Whether the bank, not the operator, has the last word on this payment.
+
+    It has it only while it is holding the payment AND still answers about it. Without that second
+    half the order is a dead end: the statuses the spec sends to a human (FALHA, NAO_DEBITADO) all
+    carry a bank id, and so does an order that aged past the 90 days after which the bank stops
+    answering - and "resolve it at the bank" would just map the same answer to the same state
+    forever, with the invoice locked behind it.
+    """
+    if not order.get("approval_code"):
+        return False
+    if _classify(order.get("payment_type"), order.get("bank_status") or "") == "human":
+        return False  # the bank answered about this id and its answer was not conclusive
+    requested = order.get("bank_request_at")
+    return not (requested and now_datetime() - get_datetime(requested) > AWAITING_BANK_MAX_AGE)
 
 
 def _refuse_reference_in_use(name: str, reference: str) -> None:

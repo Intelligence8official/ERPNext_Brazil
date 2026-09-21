@@ -266,16 +266,15 @@ async function ipo_create_payment_entry(frm) {
     }
 }
 
-function ipo_resolve_outcomes(frm) {
-    const outcomes = [
+// All three, always. Whether the bank still has the last word depends on its id, on its last
+// answer and on how old the request is - a rule this form would only copy badly. The server
+// refuses with its reason, and the dialog stays open with what the operator typed.
+function ipo_resolve_outcomes() {
+    return [
         { value: "at_bank", label: __("The bank holds it - I have the bank's request id") },
         { value: "paid", label: __("It was paid - I have the date and the reference") },
+        { value: "not_paid", label: __("It was not paid and the bank does not hold it") },
     ];
-    // With a bank id on the order the bank decides, not the operator: the server refuses not_paid.
-    if (!frm.doc.approval_code) {
-        outcomes.push({ value: "not_paid", label: __("It was not paid and the bank does not hold it") });
-    }
-    return outcomes;
 }
 
 function ipo_resolve_fields(frm) {
@@ -285,7 +284,7 @@ function ipo_resolve_fields(frm) {
     return [
         {
             fieldname: "outcome", fieldtype: "Select", label: __("What did you find at the bank?"),
-            options: ipo_resolve_outcomes(frm), reqd: 1,
+            options: ipo_resolve_outcomes(), reqd: 1,
         },
         {
             fieldname: "bank_reference", fieldtype: "Data", label: __("Bank Reference"),

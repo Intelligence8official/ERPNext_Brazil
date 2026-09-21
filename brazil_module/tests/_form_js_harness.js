@@ -160,6 +160,15 @@ function intro_for(doc) {
     return { intro: frm.intro };
 }
 
+function resolve_outcomes(doc) {
+    const sandbox = desk();
+    const frm = form(sandbox, Object.assign({ name: "IPO-A", docstatus: 1, status: "Needs Verification" }, doc));
+    sandbox.handlers.refresh(frm);
+    frm.buttons["Resolve Verification"]();
+    const field = sandbox.dialog.opts.fields.find((f) => f.fieldname === "outcome");
+    return { values: field.options.map((option) => option.value) };
+}
+
 function buttons_for(status, options) {
     const sandbox = desk();
     const frm = form(sandbox, { name: "IPO-A", docstatus: 1, status: status }, options || {});
@@ -191,6 +200,8 @@ function buttons_for(status, options) {
         intro_escapes_bank_text: intro_for({ status: "Awaiting Bank", bank_status: "<img src=x onerror=alert(1)>" }),
         buttons: {},
         buttons_without_submit_perm: buttons_for("Approved", { may_submit: false }),
+        outcomes_without_a_bank_id: resolve_outcomes({}),
+        outcomes_with_a_bank_id: resolve_outcomes({ approval_code: "c42f0787", bank_status: "FALHA" }),
     };
     for (const answer of [
         { status: "blocked", message: "The Banco Inter integration is disabled" },

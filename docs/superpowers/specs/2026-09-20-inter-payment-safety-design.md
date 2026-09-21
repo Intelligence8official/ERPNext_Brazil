@@ -91,7 +91,7 @@ Awaiting Bank --poll: terminal rejection----------> Failed
 Awaiting Bank --poll: FALHA / NAO_DEBITADO, or bank_request_at older than 85 days--> Needs Verification
 Needs Verification --resolve(at_bank, ref)--------> Awaiting Bank | Completed | Failed   (by bank status of ref)
 Needs Verification --resolve(paid, ref, paid_on)--> Completed       (+ Payment Entry)
-Needs Verification --resolve(not_paid, note)------> Failed          (refused when a bank id is known)
+Needs Verification --resolve(not_paid, note)------> Failed          (refused only while the bank still decides)
 Draft | Pending Approval | Approved | Failed --cancel--> Cancelled
 ```
 
@@ -315,7 +315,11 @@ Applies the §3 mapping with `expected_from=("Awaiting Bank",)`; poll errors nev
 - `at_bank`: `bank_reference` required; validated with a GET (`get_pix_payment` / `find_barcode_payments`);
   refused if another order already carries that id; sets `approval_code` and applies the §3 mapping.
 - `paid`: `bank_reference` and `paid_on` required → `mark_completed(..., paid_on=paid_on)`.
-- `not_paid`: refused when `approval_code` is set (the poll decides); `note` required → `mark_failed`.
+- `not_paid`: `note` required → `mark_failed`. Refused only while *the bank still decides*: it has
+  a bank id, its last answer was not one of the inconclusive ones (`FALHA`, `NAO_DEBITADO`), and the
+  request is younger than the 90 days after which the bank stops answering. Without those two
+  exceptions the order is a dead end — the statuses that send it to a human all carry a bank id, and
+  `at_bank` would only map the same answer to the same state while the invoice stays locked.
 
 `create_payment_entry_for_order` (idempotent; never changes the order status): adopt an existing
 Payment Entry with `inter_payment_order == name` (submitted → link it; draft → submit it); if the invoice

@@ -90,6 +90,19 @@ class TestResolveDialog(FormBehaviour):
         self.assertEqual(self.result["resolve_success"]["args"]["note"], "")
 
 
+class TestResolveOutcomes(FormBehaviour):
+    def test_all_three_outcomes_are_always_offered(self):
+        """Whether the bank still has the last word depends on its id, its last answer and the age
+        of the request. Copying that rule here only produced a dead end: an order the bank had
+        already reported as failed offered no way to say it was not paid, so it stayed in
+        verification forever with its invoice locked. The server refuses with its reason instead,
+        and the dialog now keeps what was typed.
+        """
+        for scenario in ("outcomes_without_a_bank_id", "outcomes_with_a_bank_id"):
+            with self.subTest(scenario=scenario):
+                self.assertEqual(self.result[scenario]["values"], ["at_bank", "paid", "not_paid"])
+
+
 class TestStaleForm(FormBehaviour):
     def test_navigating_away_during_the_reload_cancels_the_action(self):
         """One Form object serves every document of a doctype: frm.doc can change under an await."""

@@ -1373,9 +1373,39 @@ class TestResolveVerification(ServiceCase):
 
     # not_paid --------------------------------------------------------------------
 
-    def test_not_paid_is_refused_when_the_bank_gave_an_id(self):
-        self.add_in_flight("Needs Verification", approval_code=PIX_ID)
+    def test_not_paid_is_refused_while_the_bank_still_holds_the_payment(self):
+        self.add_in_flight("Needs Verification", approval_code=PIX_ID, bank_status="AGUARDANDO_APROVACAO")
         self.assert_refused("not_paid", note="not in the statement")
+
+    def test_not_paid_is_allowed_once_the_bank_has_said_it_failed(self):
+        """Otherwise the order is a dead end and the invoice stays locked forever.
+
+        FALHA and NAO_DEBITADO are what sends an order to a human in the first place, and both
+        always carry a bank id. Refusing not_paid for them leaves only 'at the bank', which just
+        re-reads the same answer and hands the order back to the same state.
+        """
+        for bank_status in ("FALHA", "NAO_DEBITADO"):
+            with self.subTest(bank_status=bank_status):
+                self.setUp()
+                self.add_in_flight("Needs Verification", approval_code=PIX_ID, bank_status=bank_status)
+
+                result = self.resolve("not_paid", note="nothing in the statement or the queue")
+
+                self.assertEqual(result["status"], "failed")
+                row = self.order()
+                self.assertEqual((row["status"], row["invoice_lock"]), ("Failed", None))
+
+    def test_not_paid_is_allowed_once_the_bank_stops_answering(self):
+        """After 90 days the bank cannot be asked, so 'at the bank' cannot resolve it either."""
+        self.add_in_flight(
+            "Needs Verification", approval_code=PIX_ID, bank_status="AGUARDANDO_APROVACAO",
+            minutes_ago=86 * 24 * 60,
+        )
+
+        result = self.resolve("not_paid", note="the bank no longer answers about this id")
+
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(self.order()["invoice_lock"], None)
 
     def test_not_paid_needs_a_note(self):
         self.add_in_flight("Needs Verification")
